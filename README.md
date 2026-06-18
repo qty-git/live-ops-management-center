@@ -1,6 +1,6 @@
 # 直播间运营管理中台 MVP
 
-第一版实现“时间轴排班复盘模块”，使用 React + TypeScript + Vite 开发，数据保存在浏览器 `localStorage`，不依赖后端、登录或权限系统。
+第一版实现“时间轴排班复盘模块”，使用 React + TypeScript + Vite 开发。当前已接入腾讯云 CloudBase 作为云端数据源，浏览器 `localStorage` 仍作为离线和异常兜底。
 
 ## 运行
 
@@ -15,6 +15,26 @@ npm run dev
 npm run lint
 npm run build
 npm audit --audit-level=moderate
+```
+
+## 云端数据
+
+默认 CloudBase 环境：
+
+- 环境 ID：`liveops-prod-d7gcjjnv6edbeedb9`
+- 地域：`ap-shanghai`
+- 集合：`timeline_stores`
+- 文档 ID：`main`
+
+前端会使用匿名登录读写 `timeline_stores/main`，并将完整 `TimelineStore` 存在该文档的 `store` 字段里。首次打开时会先加载本地数据，再尝试加载云端；云端失败时继续使用本地数据。
+
+如需切换环境，可在构建时配置：
+
+```bash
+VITE_CLOUDBASE_ENV_ID=your-env-id
+VITE_CLOUDBASE_REGION=ap-shanghai
+VITE_CLOUDBASE_TIMELINE_COLLECTION=timeline_stores
+VITE_CLOUDBASE_TIMELINE_DOCUMENT_ID=main
 ```
 
 ## 结构

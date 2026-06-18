@@ -34,7 +34,7 @@ export function saveDay(store: TimelineStore, date: string, day: TimelineDayData
   }
 }
 
-function normalizeStore(store: TimelineStore): TimelineStore {
+export function normalizeStore(store: TimelineStore): TimelineStore {
   return {
     ...store,
     people: store.people?.length ? store.people : createDefaultPeople(),

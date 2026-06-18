@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ComparisonTable } from '../components/ComparisonTable'
 import { EditCenterPanel } from '../components/EditCenterPanel'
 import { EventEditor } from '../components/EventEditor'
@@ -10,6 +10,7 @@ import { TemplateApplyModal, type TemplateApplyDraft } from '../components/Templ
 import { TimelineBoard } from '../components/TimelineBoard'
 import { TimeRangeSlider } from '../components/TimeRangeSlider'
 import { TopControls } from '../components/TopControls'
+import { loadTimelineStoreFromCloud, saveTimelineStoreToCloud } from '../cloudStorage'
 import { createDefaultDayData } from '../defaultData'
 import { exportTimelineExcel } from '../exportExcel'
 import { ensureDay, loadTimelineStore, saveDay, saveTimelineStore } from '../storage'
@@ -60,11 +61,13 @@ export function TimelinePage({ mode }: TimelinePageProps) {
     const loaded = loadTimelineStore()
     return loaded.days[initialDate] ? loaded : saveDay(loaded, initialDate, createDefaultDayData(initialDate))
   })
-  const [saveStatus, setSaveStatus] = useState('已加载本地数据')
+  const [saveStatus, setSaveStatus] = useState('已加载本地数据，正在连接云端')
   const [editingEventRef, setEditingEventRef] = useState<EditingEventRef | null>(null)
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
   const [templateApplyRequest, setTemplateApplyRequest] = useState<TemplateApplyRequest | null>(null)
+  const cloudReadyRef = useRef(false)
+  const cloudSaveTimerRef = useRef<number | null>(null)
 
   const day = useMemo(() => ensureDay(store, selectedDate), [selectedDate, store])
   const tomorrowDate = addDays(selectedDate, 1)
@@ -88,6 +91,64 @@ export function TimelinePage({ mode }: TimelinePageProps) {
 
   useEffect(() => {
     saveTimelineStore(store)
+  }, [store])
+
+  useEffect(() => {
+    let active = true
+
+    loadTimelineStoreFromCloud()
+      .then((cloudStore) => {
+        if (!active) return
+
+        cloudReadyRef.current = true
+        if (cloudStore) {
+          setStore(cloudStore)
+          setSaveStatus('已加载云端数据')
+          return
+        }
+
+        saveTimelineStoreToCloud(store)
+          .then(() => {
+            if (active) setSaveStatus('已初始化云端数据')
+          })
+          .catch(() => {
+            if (active) setSaveStatus('云端初始化失败，已保留本地数据')
+          })
+      })
+      .catch(() => {
+        if (!active) return
+        cloudReadyRef.current = false
+        setSaveStatus('云端未连接，继续使用本地数据')
+      })
+
+    return () => {
+      active = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!cloudReadyRef.current) return
+
+    if (cloudSaveTimerRef.current) {
+      window.clearTimeout(cloudSaveTimerRef.current)
+    }
+
+    cloudSaveTimerRef.current = window.setTimeout(() => {
+      saveTimelineStoreToCloud(store)
+        .then(() => {
+          setSaveStatus(`已同步云端 ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`)
+        })
+        .catch(() => {
+          setSaveStatus('云端同步失败，已保存到本地')
+        })
+    }, 800)
+
+    return () => {
+      if (cloudSaveTimerRef.current) {
+        window.clearTimeout(cloudSaveTimerRef.current)
+      }
+    }
   }, [store])
 
   useEffect(() => {
