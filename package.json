@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:cloudbase": "VITE_DEPLOY_BASE=/ npm run build",
+    "deploy:cloudbase": "npm run build:cloudbase && npx -p @cloudbase/cli@latest tcb hosting deploy ./dist / -e liveops-prod-d7gcjjnv6edbeedb9",
     "lint": "eslint .",
     "preview": "vite preview"
   },

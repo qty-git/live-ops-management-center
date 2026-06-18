@@ -17,6 +17,23 @@ npm run build
 npm audit --audit-level=moderate
 ```
 
+## 线上地址
+
+- GitHub Pages：`https://qty-git.github.io/live-ops-management-center/`
+- 腾讯云 CloudBase：`https://liveops-prod-d7gcjjnv6edbeedb9-1444875076.tcloudbaseapp.com`
+
+CloudBase 测试域名首次访问可能会出现腾讯云风险提示，确认后即可进入应用。后续如果绑定已备案的自定义域名，可以去掉这层提示。
+
+## 部署
+
+GitHub Pages 会由 GitHub Actions 在推送 `main` 后自动更新。
+
+CloudBase 静态托管使用根路径构建并上传：
+
+```bash
+npm run deploy:cloudbase
+```
+
 ## 云端数据
 
 默认 CloudBase 环境：
