@@ -74,6 +74,17 @@ export function createDefaultWorkTemplates(): WorkTemplate[] {
   ]
 }
 
+export function createEmptyDayData(date: string): TimelineDayData {
+  return {
+    settings: createDefaultSettings(date),
+    events: [],
+    tomorrowEvents: [],
+    tasks: [],
+    tomorrowPlans: [],
+    comparisonNotes: [],
+  }
+}
+
 export function createDefaultDayData(date: string): TimelineDayData {
   const events: WorkEvent[] = [
     createEvent(date, '选款', '事前准备', '08:00', '09:00', '确认今日直播与视频需要的基础款池。'),
@@ -194,6 +205,7 @@ function createTask(
     status: '绿',
     problem: '',
     solution: '',
+    issues: [],
     note: '',
     sourcePlanId: '',
   }

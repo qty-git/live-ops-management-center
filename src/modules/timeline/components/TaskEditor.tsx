@@ -1,8 +1,8 @@
-import { Trash2 } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { Modal } from '../../../shared/components/Modal'
-import type { TimelineTask, WorkEvent } from '../types'
+import type { TaskIssue, TimelineTask, WorkEvent } from '../types'
 import { TASK_STATUSES, TEAM_ROLES, type TeamRole } from '../types'
-import { ensureEndAfterStart, eventLabel } from '../utils'
+import { createId, ensureEndAfterStart, eventLabel } from '../utils'
 import { TimeInput } from './TimeInput'
 
 interface TaskEditorProps {
@@ -51,6 +51,36 @@ export function TaskEditor({ task, events, peopleOptionsByRole, onSave, onDelete
     })
   }
 
+  const saveIssues = (issues: TaskIssue[]) => {
+    const firstIssue = issues.find((issue) => issue.problem.trim() || issue.solution.trim()) ?? issues[0]
+    onSave({
+      ...task,
+      issues,
+      problem: firstIssue?.problem ?? '',
+      solution: firstIssue?.solution ?? '',
+    })
+  }
+
+  const addIssue = () => {
+    saveIssues([
+      ...(task.issues ?? []),
+      {
+        id: createId('issue'),
+        problem: '',
+        solution: '',
+      },
+    ])
+  }
+
+  const updateIssue = (issueId: string, patch: Partial<Pick<TaskIssue, 'problem' | 'solution'>>) => {
+    saveIssues((task.issues ?? []).map((issue) => (issue.id === issueId ? { ...issue, ...patch } : issue)))
+  }
+
+  const deleteIssue = (issueId: string) => {
+    saveIssues((task.issues ?? []).filter((issue) => issue.id !== issueId))
+  }
+
+  const issues = task.issues ?? []
   const personOptions = peopleOptionsByRole[task.role] ?? []
   const personListId = `people-options-${task.role}`
   const confirmDelete = () => {
@@ -135,14 +165,33 @@ export function TaskEditor({ task, events, peopleOptionsByRole, onSave, onDelete
             ))}
           </div>
         </fieldset>
-        <label className="field-wide">
-          遇到的问题
-          <textarea value={task.problem} onChange={(e) => update('problem', e.target.value)} />
-        </label>
-        <label className="field-wide">
-          解决方案
-          <textarea value={task.solution} onChange={(e) => update('solution', e.target.value)} />
-        </label>
+        <div className="task-issues field-wide">
+          <div className="task-issues-header">
+            <strong>问题与解决方案</strong>
+            <button className="secondary-button compact-secondary-button" type="button" onClick={addIssue}>
+              <Plus size={14} /> 新增问题
+            </button>
+          </div>
+          {issues.length === 0 ? <div className="empty-state compact-empty-state">这个任务还没有问题记录。</div> : null}
+          {issues.map((issue, index) => (
+            <div className="task-issue-card" key={issue.id}>
+              <div className="task-issue-card-header">
+                <span>问题 {index + 1}</span>
+                <button className="icon-button danger-icon" type="button" onClick={() => deleteIssue(issue.id)} aria-label={`删除问题 ${index + 1}`}>
+                  <Trash2 size={14} />
+                </button>
+              </div>
+              <label>
+                遇到的问题
+                <textarea value={issue.problem} onChange={(event) => updateIssue(issue.id, { problem: event.target.value })} />
+              </label>
+              <label>
+                解决方案
+                <textarea value={issue.solution} onChange={(event) => updateIssue(issue.id, { solution: event.target.value })} />
+              </label>
+            </div>
+          ))}
+        </div>
         <label className="field-wide">
           备注
           <textarea value={task.note} onChange={(e) => update('note', e.target.value)} />

@@ -1,5 +1,6 @@
 import { ExternalLink } from 'lucide-react'
 import type { TimelineTask } from '../types'
+import { collectTaskIssues } from '../utils'
 
 interface IssueListProps {
   tasks: TimelineTask[]
@@ -7,7 +8,7 @@ interface IssueListProps {
 }
 
 export function IssueList({ tasks, onOpenTask }: IssueListProps) {
-  const issueTasks = tasks.filter((task) => task.problem.trim())
+  const issueItems = tasks.flatMap((task) => collectTaskIssues(task).map((issue) => ({ task, issue })))
 
   return (
     <section className="data-section">
@@ -18,14 +19,14 @@ export function IssueList({ tasks, onOpenTask }: IssueListProps) {
         </div>
       </div>
       <div className="issue-list">
-        {issueTasks.map((task) => (
-          <article className="issue-item" key={task.id}>
+        {issueItems.map(({ task, issue }) => (
+          <article className="issue-item" key={`${task.id}-${issue.id}`}>
             <div>
               <strong>
                 {task.role} · {task.startTime}-{task.endTime}
               </strong>
-              <p>{task.problem}</p>
-              {task.solution ? <span>解决方案：{task.solution}</span> : null}
+              <p>{issue.problem}</p>
+              {issue.solution ? <span>解决方案：{issue.solution}</span> : null}
               {task.note ? <span>备注：{task.note}</span> : null}
             </div>
             <button className="secondary-button" type="button" onClick={() => onOpenTask(task)}>
@@ -33,7 +34,7 @@ export function IssueList({ tasks, onOpenTask }: IssueListProps) {
             </button>
           </article>
         ))}
-        {issueTasks.length === 0 ? <div className="empty-state">今天还没有问题记录。</div> : null}
+        {issueItems.length === 0 ? <div className="empty-state">今天还没有问题记录。</div> : null}
       </div>
     </section>
   )

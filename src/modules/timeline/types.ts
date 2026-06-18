@@ -45,6 +45,12 @@ export interface WorkEvent {
   note: string
 }
 
+export interface TaskIssue {
+  id: string
+  problem: string
+  solution: string
+}
+
 export interface TimelineTask {
   id: string
   date: string
@@ -57,6 +63,7 @@ export interface TimelineTask {
   status: TaskStatus
   problem: string
   solution: string
+  issues: TaskIssue[]
   note: string
   sourcePlanId: string
 }

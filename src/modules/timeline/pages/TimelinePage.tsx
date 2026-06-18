@@ -11,7 +11,6 @@ import { TimelineBoard } from '../components/TimelineBoard'
 import { TimeRangeSlider } from '../components/TimeRangeSlider'
 import { TopControls } from '../components/TopControls'
 import { loadTimelineStoreFromCloud, saveTimelineStoreToCloud } from '../cloudStorage'
-import { createDefaultDayData } from '../defaultData'
 import { exportTimelineExcel } from '../exportExcel'
 import { ensureDay, loadTimelineStore, saveDay, saveTimelineStore } from '../storage'
 import type {
@@ -57,10 +56,7 @@ interface TimelinePageProps {
 export function TimelinePage({ mode }: TimelinePageProps) {
   const initialDate = todayISO()
   const [selectedDate, setSelectedDate] = useState(initialDate)
-  const [store, setStore] = useState<TimelineStore>(() => {
-    const loaded = loadTimelineStore()
-    return loaded.days[initialDate] ? loaded : saveDay(loaded, initialDate, createDefaultDayData(initialDate))
-  })
+  const [store, setStore] = useState<TimelineStore>(() => loadTimelineStore())
   const [saveStatus, setSaveStatus] = useState('已加载本地数据，正在连接云端')
   const [editingEventRef, setEditingEventRef] = useState<EditingEventRef | null>(null)
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
@@ -81,6 +77,10 @@ export function TimelinePage({ mode }: TimelinePageProps) {
     () => buildComparisonRows(plansForToday, day.tasks, day.comparisonNotes),
     [day.comparisonNotes, day.tasks, plansForToday],
   )
+  const hasRecordOnDate = (date: string) => {
+    const dateDay = store.days[date]
+    return dateDay ? hasDayRecords(dateDay) : false
+  }
   const editingEvent =
     editingEventRef?.scope === 'plan'
       ? day.tomorrowEvents.find((event) => event.id === editingEventRef.id)
@@ -173,7 +173,10 @@ export function TimelinePage({ mode }: TimelinePageProps) {
 
   const updateSettings = (settings: TimelineSettings) => {
     if (settings.date !== selectedDate) {
-      setStore((current) => (current.days[settings.date] ? current : saveDay(current, settings.date, createDefaultDayData(settings.date))))
+      if (settings.date > todayISO()) {
+        setSaveStatus('不能选择未来日期')
+        return
+      }
       setSelectedDate(settings.date)
       setSaveStatus(`已切换到 ${settings.date}`)
       return
@@ -346,6 +349,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
           status: '绿',
           problem: '',
           solution: '',
+          issues: [],
           note: assignment.note,
           sourcePlanId: '',
         }
@@ -497,16 +501,17 @@ export function TimelinePage({ mode }: TimelinePageProps) {
 
   return (
     <main className="timeline-page">
-      <TopControls
-        settings={day.settings}
-        saveStatus={saveStatus}
-        onSettingsChange={updateSettings}
-        onCopyYesterdayPlan={copyYesterdayPlan}
-        onExportExcel={exportExcel}
-      />
-
       {mode === 'dashboard' ? (
         <>
+          <TopControls
+            settings={day.settings}
+            saveStatus={saveStatus}
+            hasRecordOnDate={hasRecordOnDate}
+            onSettingsChange={updateSettings}
+            onCopyYesterdayPlan={copyYesterdayPlan}
+            onExportExcel={exportExcel}
+          />
+
           <div className="shared-range-panel">
             <TimeRangeSlider
               workStartTime={day.settings.workStartTime}
@@ -616,6 +621,16 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   )
 }
 
+function hasDayRecords(day: TimelineDayData): boolean {
+  return (
+    day.events.length > 0 ||
+    day.tomorrowEvents.length > 0 ||
+    day.tasks.length > 0 ||
+    day.tomorrowPlans.length > 0 ||
+    day.comparisonNotes.some((note) => note.deviationReason.trim() || note.tomorrowSuggestion.trim())
+  )
+}
+
 function normalizeSettings(settings: TimelineSettings): TimelineSettings {
   const workStart = minutesFromTime(settings.workStartTime)
   const actualEnd = Math.max(workStart + 30, minutesFromTime(settings.actualEndTime))
@@ -672,6 +687,7 @@ function applyYesterdayPlanToDay(day: TimelineDayData, date: string, previousDay
           status: '绿' as const,
           problem: '',
           solution: '',
+          issues: [],
           note: plan.note,
           sourcePlanId: plan.id,
         })),
@@ -716,6 +732,7 @@ function createTask(date: string, role: TeamRole, startTime: string, latestEndTi
     status: '绿',
     problem: '',
     solution: '',
+    issues: [],
     note: '',
     sourcePlanId: '',
   }

@@ -2,6 +2,7 @@ import type {
   ComparisonNote,
   ComparisonRow,
   DeviationStatus,
+  TaskIssue,
   TimelinePrecision,
   TimelineTask,
   TomorrowPlan,
@@ -15,13 +16,25 @@ export const DEFAULT_ACTUAL_END = '20:00'
 const MINUTES_PER_DAY = 24 * 60
 
 export function todayISO(): string {
-  return new Date().toISOString().slice(0, 10)
+  return formatDateISO(new Date())
+}
+
+export function formatDateISO(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+export function parseISODate(dateISO: string): Date {
+  const [year, month, day] = dateISO.split('-').map(Number)
+  return new Date(year, (month || 1) - 1, day || 1)
 }
 
 export function addDays(dateISO: string, days: number): string {
-  const date = new Date(`${dateISO}T00:00:00`)
+  const date = parseISODate(dateISO)
   date.setDate(date.getDate() + days)
-  return date.toISOString().slice(0, 10)
+  return formatDateISO(date)
 }
 
 export function minutesFromTime(time: string): number {
@@ -184,6 +197,35 @@ export function formatDuration(minutes: number): string {
 
 export function calculateTaskMinutes(task: TimelineTask): number {
   return rangeDuration(task.startTime, task.endTime)
+}
+
+export function collectTaskIssues(task: TimelineTask): TaskIssue[] {
+  const issues = Array.isArray(task.issues) ? task.issues : []
+  const normalizedIssues = issues
+    .map((issue) => ({
+      id: issue.id || createId('issue'),
+      problem: issue.problem ?? '',
+      solution: issue.solution ?? '',
+    }))
+    .filter((issue) => issue.problem.trim() || issue.solution.trim())
+
+  if (normalizedIssues.length > 0) return normalizedIssues
+  if (!task.problem.trim() && !task.solution.trim()) return []
+
+  return [
+    {
+      id: createId('issue'),
+      problem: task.problem,
+      solution: task.solution,
+    },
+  ]
+}
+
+export function taskIssueSummary(task: TimelineTask, field: keyof Pick<TaskIssue, 'problem' | 'solution'>): string {
+  return collectTaskIssues(task)
+    .map((issue) => issue[field].trim())
+    .filter(Boolean)
+    .join('\n')
 }
 
 export function eventLabel(event?: WorkEvent): string {

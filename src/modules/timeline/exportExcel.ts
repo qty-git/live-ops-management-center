@@ -1,6 +1,6 @@
 import writeXlsxFile, { type SheetData } from 'write-excel-file/browser'
-import type { ComparisonRow, TimelineDayData, TimelineTask, TomorrowPlan, WorkEvent } from './types'
-import { addDays, calculateTaskMinutes, eventLabel, formatDuration, getWorkEventById } from './utils'
+import type { ComparisonRow, TaskIssue, TimelineDayData, TimelineTask, TomorrowPlan, WorkEvent } from './types'
+import { addDays, calculateTaskMinutes, collectTaskIssues, eventLabel, formatDuration, getWorkEventById, taskIssueSummary } from './utils'
 
 type CellValue = string | number | Date | boolean | null
 
@@ -28,7 +28,7 @@ export async function exportTimelineExcel(params: {
   plansForTomorrow: TomorrowPlan[]
 }) {
   const { date, day, comparisonRows, plansForTomorrow } = params
-  const issues = day.tasks.filter((task) => task.problem.trim())
+  const issues = day.tasks.flatMap((task) => collectTaskIssues(task).map((issue) => ({ task, issue })))
   const sheets = [
     { sheet: '老板汇总', data: buildBossSummarySheet(date, day, issues, plansForTomorrow) },
     { sheet: '今日实际记录', data: buildActualRecordsSheet(day.tasks, day.events) },
@@ -52,7 +52,7 @@ function header(values: string[]): SheetRow {
 function buildBossSummarySheet(
   date: string,
   day: TimelineDayData,
-  issues: TimelineTask[],
+  issues: Array<{ task: TimelineTask; issue: TaskIssue }>,
   plansForTomorrow: TomorrowPlan[],
 ): SheetRow[] {
   const completed = day.tasks
@@ -66,8 +66,8 @@ function buildBossSummarySheet(
     row(['工作时间范围', `${day.settings.workStartTime}-${day.settings.actualEndTime}（标准结束 ${day.settings.standardEndTime}）`]),
     row(['今日主要工作事件', day.events.map((event) => `${event.startTime}-${event.endTime} ${eventLabel(event)}`).join('\n')]),
     row(['今日完成事项总结', completed || '暂无已完成记录']),
-    row(['主要问题', issues.map((task) => `${task.role} ${task.startTime}-${task.endTime}：${task.problem}`).join('\n') || '暂无问题记录']),
-    row(['已采取解决方案', issues.map((task) => `${task.role}：${task.solution || '待补充'}`).join('\n') || '暂无']),
+    row(['主要问题', issues.map(({ task, issue }) => `${task.role} ${task.startTime}-${task.endTime}：${issue.problem}`).join('\n') || '暂无问题记录']),
+    row(['已采取解决方案', issues.map(({ task, issue }) => `${task.role}：${issue.solution || '待补充'}`).join('\n') || '暂无']),
     row(['明日重点安排', plansForTomorrow.map((plan) => `${plan.startTime}-${plan.endTime} ${plan.role} ${plan.content}`).join('\n') || `暂无 ${addDays(date, 1)} 计划`]),
   ]
 }
@@ -85,8 +85,8 @@ function buildActualRecordsSheet(tasks: TimelineTask[], events: WorkEvent[]): Sh
         task.content,
         eventLabel(getWorkEventById(events, task.workEventId)),
         task.status,
-        task.problem,
-        task.solution,
+        taskIssueSummary(task, 'problem'),
+        taskIssueSummary(task, 'solution'),
         task.note,
         task.sourcePlanId,
       ]),
@@ -134,10 +134,10 @@ function buildComparisonSheet(rows: ComparisonRow[]): SheetRow[] {
   ]
 }
 
-function buildIssueSheet(tasks: TimelineTask[]): SheetRow[] {
+function buildIssueSheet(issues: Array<{ task: TimelineTask; issue: TaskIssue }>): SheetRow[] {
   return [
     header(['岗位', '时间段', '问题', '解决方案', '备注']),
-    ...tasks.map((task) => row([task.role, `${task.startTime}-${task.endTime}`, task.problem, task.solution, task.note])),
+    ...issues.map(({ task, issue }) => row([task.role, `${task.startTime}-${task.endTime}`, issue.problem, issue.solution, task.note])),
   ]
 }
 

@@ -1,15 +1,17 @@
 import { CopyPlus, Download, Save } from 'lucide-react'
 import type { TimelineSettings } from '../types'
+import { DatePicker } from './DatePicker'
 
 interface TopControlsProps {
   settings: TimelineSettings
   saveStatus: string
+  hasRecordOnDate: (date: string) => boolean
   onSettingsChange: (settings: TimelineSettings) => void
   onCopyYesterdayPlan: () => void
   onExportExcel: () => void
 }
 
-export function TopControls({ settings, saveStatus, onSettingsChange, onCopyYesterdayPlan, onExportExcel }: TopControlsProps) {
+export function TopControls({ settings, saveStatus, hasRecordOnDate, onSettingsChange, onCopyYesterdayPlan, onExportExcel }: TopControlsProps) {
   const update = <K extends keyof TimelineSettings>(key: K, value: TimelineSettings[K]) => {
     onSettingsChange({ ...settings, [key]: value })
   }
@@ -23,7 +25,7 @@ export function TopControls({ settings, saveStatus, onSettingsChange, onCopyYest
       <div className="controls-grid">
         <label>
           日期
-          <input type="date" value={settings.date} onChange={(e) => update('date', e.target.value)} />
+          <DatePicker value={settings.date} hasRecord={hasRecordOnDate} onChange={(date) => update('date', date)} />
         </label>
         <label>
           工作开始

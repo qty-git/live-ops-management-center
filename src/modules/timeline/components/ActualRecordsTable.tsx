@@ -1,7 +1,7 @@
 import { Plus, Trash2 } from 'lucide-react'
-import type { TeamRole, TimelineTask, WorkEvent } from '../types'
+import type { TaskIssue, TeamRole, TimelineTask, WorkEvent } from '../types'
 import { TASK_STATUSES, TEAM_ROLES } from '../types'
-import { eventLabel, getWorkEventById } from '../utils'
+import { createId, eventLabel, getWorkEventById, taskIssueSummary } from '../utils'
 
 interface ActualRecordsTableProps {
   tasks: TimelineTask[]
@@ -54,6 +54,18 @@ export function ActualRecordsTable({
       workEventId,
       startTime: event?.startTime ?? task.startTime,
       endTime: event?.endTime ?? task.endTime,
+    })
+  }
+
+  const updateFirstIssue = (task: TimelineTask, key: keyof Pick<TaskIssue, 'problem' | 'solution'>, value: string) => {
+    const issues = task.issues ?? []
+    const [firstIssue, ...restIssues] = issues.length > 0 ? issues : [{ id: createId('issue'), problem: '', solution: '' }]
+    const nextFirstIssue = { ...firstIssue, [key]: value }
+    onUpdate({
+      ...task,
+      issues: [nextFirstIssue, ...restIssues],
+      problem: nextFirstIssue.problem,
+      solution: nextFirstIssue.solution,
     })
   }
 
@@ -179,10 +191,10 @@ export function ActualRecordsTable({
                   </select>
                 </td>
                 <td>
-                  <textarea value={task.problem} onChange={(e) => update(task, 'problem', e.target.value)} />
+                  <textarea value={taskIssueSummary(task, 'problem')} onChange={(e) => updateFirstIssue(task, 'problem', e.target.value)} />
                 </td>
                 <td>
-                  <textarea value={task.solution} onChange={(e) => update(task, 'solution', e.target.value)} />
+                  <textarea value={taskIssueSummary(task, 'solution')} onChange={(e) => updateFirstIssue(task, 'solution', e.target.value)} />
                 </td>
                 <td>
                   <textarea value={task.note} onChange={(e) => update(task, 'note', e.target.value)} />

@@ -38,6 +38,7 @@ export function PlanTimelineBoard({
     status: '绿',
     problem: '',
     solution: '',
+    issues: [],
     note: plan.note,
     sourcePlanId: plan.id,
   }))

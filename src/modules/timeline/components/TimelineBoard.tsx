@@ -2,7 +2,7 @@ import { Maximize2, Minimize2, Plus } from 'lucide-react'
 import { useRef, useState } from 'react'
 import type { TeamRole, TimelinePrecision, TimelineTask, WorkEvent } from '../types'
 import { TEAM_ROLES } from '../types'
-import { buildTicks, getItemRange, getPrecision, layoutOverlaps, minutesFromTime, snapMinutes, timeFromMinutes } from '../utils'
+import { buildTicks, getItemRange, getPrecision, layoutOverlaps, minutesFromTime, snapMinutes, taskIssueSummary, timeFromMinutes } from '../utils'
 
 const EVENT_BLOCK_HEIGHT = 44
 const TASK_BLOCK_HEIGHT = 76
@@ -366,7 +366,9 @@ function TimelineRoleLane({
               {precision !== 'hour' ? ` · ${task.status}` : ''}
             </span>
             {precision === 'quarter' || precision === 'fiveMinute' ? <span className="block-detail">{task.personName}</span> : null}
-            {precision === 'fiveMinute' && task.problem ? <span className="block-detail">问题：{task.problem}</span> : null}
+            {precision === 'fiveMinute' && taskIssueSummary(task, 'problem') ? (
+              <span className="block-detail">问题：{taskIssueSummary(task, 'problem')}</span>
+            ) : null}
             {expanded && task.note ? <span className="block-detail">备注：{task.note}</span> : null}
           </button>
         )}
