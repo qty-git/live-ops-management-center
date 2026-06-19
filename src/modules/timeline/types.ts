@@ -84,6 +84,7 @@ export interface TomorrowPlan {
 
 export interface WorkTemplateStage {
   id: string
+  eventName?: string
   phase: WorkEventPhase
   enabled: boolean
   startTime: string
@@ -108,6 +109,18 @@ export interface WorkTemplate {
   assignments: WorkTemplateAssignment[]
 }
 
+export type DayPlanTemplateEvent = Omit<WorkEvent, 'date'>
+
+export type DayPlanTemplatePlan = Omit<TomorrowPlan, 'planDate'>
+
+export interface DayPlanTemplate {
+  id: string
+  name: string
+  note: string
+  events: DayPlanTemplateEvent[]
+  plans: DayPlanTemplatePlan[]
+}
+
 export interface ComparisonNote {
   id: string
   date: string
@@ -130,6 +143,7 @@ export interface TimelineStore {
   days: Record<string, TimelineDayData>
   people: TeamPerson[]
   workTemplates: WorkTemplate[]
+  dayPlanTemplates: DayPlanTemplate[]
 }
 
 export interface ComparisonRow {

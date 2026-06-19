@@ -14,7 +14,7 @@ interface CloudTimelineDocument {
 
 export async function loadTimelineStoreFromCloud(): Promise<TimelineStore | null> {
   const app = await getCloudBaseApp()
-  if (!app) return null
+  if (!app) throw new Error('CloudBase 未启用')
 
   const db = app.database()
   const result = await withTimeout(db.collection(COLLECTION_NAME).doc(DOCUMENT_ID).get(), 12000, 'CloudBase 数据读取超时')

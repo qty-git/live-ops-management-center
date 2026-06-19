@@ -15,6 +15,7 @@ import { exportTimelineExcel } from '../exportExcel'
 import { ensureDay, loadTimelineStore, saveDay, saveTimelineStore } from '../storage'
 import type {
   ComparisonNote,
+  DayPlanTemplate,
   TeamPerson,
   TeamRole,
   TimelineDayData,
@@ -62,6 +63,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
   const [templateApplyRequest, setTemplateApplyRequest] = useState<TemplateApplyRequest | null>(null)
+  const [selectedPlanTemplateId, setSelectedPlanTemplateId] = useState('')
   const cloudReadyRef = useRef(false)
   const cloudSaveTimerRef = useRef<number | null>(null)
 
@@ -88,6 +90,10 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   const editingTask = day.tasks.find((task) => task.id === editingTaskId)
   const editingPlan = day.tomorrowPlans.find((plan) => plan.id === editingPlanId)
   const peopleOptionsByRole = useMemo(() => buildPeopleOptionsByRole(day, store.people), [day, store.people])
+  const selectedPlanTemplate = useMemo(
+    () => store.dayPlanTemplates.find((template) => template.id === selectedPlanTemplateId) ?? store.dayPlanTemplates[0],
+    [selectedPlanTemplateId, store.dayPlanTemplates],
+  )
 
   useEffect(() => {
     saveTimelineStore(store)
@@ -234,51 +240,42 @@ export function TimelinePage({ mode }: TimelinePageProps) {
     setSaveStatus(`已保存 ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`)
   }
 
-  const applyTemplateToTomorrow = (template: WorkTemplate) => {
-    if ((day.tomorrowEvents.length > 0 || tomorrowPlans.length > 0) && !window.confirm('套用模板会替换当前次日计划事件和计划任务，确认继续？')) {
+  const updateDayPlanTemplates = (dayPlanTemplates: DayPlanTemplate[]) => {
+    setStore((current) => ({
+      ...current,
+      dayPlanTemplates,
+    }))
+    setSaveStatus(`已保存 ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`)
+  }
+
+  const applyDayPlanTemplateToTomorrow = (template: DayPlanTemplate) => {
+    if ((day.tomorrowEvents.length > 0 || tomorrowPlans.length > 0) && !window.confirm('套用整日模板会替换当前次日计划事件和计划任务，确认继续？')) {
       return
     }
 
-    const enabledStages = template.stages.filter((stage) => stage.enabled)
-    const stageEventId = new Map<string, string>()
-    const nextEvents: WorkEvent[] = enabledStages.map((stage) => {
+    const eventIdMap = new Map<string, string>()
+    const nextEvents: WorkEvent[] = template.events.map((event) => {
       const eventId = createId('event')
-      stageEventId.set(stage.id, eventId)
+      eventIdMap.set(event.id, eventId)
       return {
+        ...event,
         id: eventId,
         date: tomorrowDate,
-        name: template.name,
-        phase: stage.phase,
-        startTime: stage.startTime,
-        endTime: stage.endTime,
-        note: stage.note,
       }
     })
-    const nextPlans: TomorrowPlan[] = template.assignments
-      .filter((assignment) => stageEventId.has(assignment.stageId))
-      .map((assignment) => {
-        const event = nextEvents.find((item) => item.id === stageEventId.get(assignment.stageId))
-        return {
-          id: createId('plan'),
-          planDate: tomorrowDate,
-          startTime: event?.startTime ?? day.settings.workStartTime,
-          endTime: event?.endTime ?? day.settings.actualEndTime,
-          role: assignment.role,
-          owner: assignment.owner,
-          workEventId: event?.id ?? '',
-          content: assignment.content,
-          priority: '中' as const,
-          expectedResult: '',
-          note: assignment.note,
-        }
-      })
+    const nextPlans: TomorrowPlan[] = template.plans.map((plan) => ({
+      ...plan,
+      id: createId('plan'),
+      planDate: tomorrowDate,
+      workEventId: eventIdMap.get(plan.workEventId) ?? '',
+    }))
 
     updateDay((current) => ({
       ...current,
       tomorrowEvents: nextEvents,
       tomorrowPlans: [...current.tomorrowPlans.filter((plan) => plan.planDate !== tomorrowDate), ...nextPlans],
     }))
-    setSaveStatus(`已套用模板：${template.name}`)
+    setSaveStatus(`已复用整日计划模板：${template.name}`)
   }
 
   const requestTemplateAt = (time: string, scope: EventEditScope) => {
@@ -299,7 +296,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
       return {
         id: eventId,
         date: eventDate,
-        name: draft.name,
+        name: stage.eventName?.trim() || draft.name,
         phase: stage.phase,
         startTime: stage.startTime,
         endTime: stage.endTime,
@@ -388,11 +385,8 @@ export function TimelinePage({ mode }: TimelinePageProps) {
       ...current,
       events: scope === 'actual' ? current.events.filter((event) => event.id !== eventId) : current.events,
       tomorrowEvents: scope === 'plan' ? current.tomorrowEvents.filter((event) => event.id !== eventId) : current.tomorrowEvents,
-      tasks: scope === 'actual' ? current.tasks.map((task) => (task.workEventId === eventId ? { ...task, workEventId: '' } : task)) : current.tasks,
-      tomorrowPlans:
-        scope === 'plan'
-          ? current.tomorrowPlans.map((plan) => (plan.workEventId === eventId ? { ...plan, workEventId: '' } : plan))
-          : current.tomorrowPlans,
+      tasks: scope === 'actual' ? current.tasks.filter((task) => task.workEventId !== eventId) : current.tasks,
+      tomorrowPlans: scope === 'plan' ? current.tomorrowPlans.filter((plan) => plan.workEventId !== eventId) : current.tomorrowPlans,
     }))
     setEditingEventRef(null)
   }
@@ -428,6 +422,11 @@ export function TimelinePage({ mode }: TimelinePageProps) {
     setEditingTaskId(task.id)
   }
 
+  const createTaskForEvent = (event: WorkEvent) => {
+    const task = createTask(selectedDate, '运营', event.startTime, event.endTime, event.id)
+    upsertTask(task)
+  }
+
   const upsertPlan = (plan: TomorrowPlan) => {
     updateDay((current) => ({
       ...current,
@@ -437,17 +436,16 @@ export function TimelinePage({ mode }: TimelinePageProps) {
     }))
   }
 
-  const addPlan = () => {
-    const plan = createPlan('运营', day.settings.workStartTime, day.settings.actualEndTime, day.tomorrowEvents[0]?.id ?? '', tomorrowDate)
-    upsertPlan(plan)
-    setEditingPlanId(plan.id)
-  }
-
   const createPlanAt = (role: TeamRole, time: string) => {
     const event = findEventAt(day.tomorrowEvents, time)
     const plan = createPlan(role, event?.startTime ?? time, event?.endTime ?? day.settings.actualEndTime, event?.id ?? '', tomorrowDate)
     upsertPlan(plan)
     setEditingPlanId(plan.id)
+  }
+
+  const createPlanForEvent = (event: WorkEvent) => {
+    const plan = createPlan('运营', event.startTime, event.endTime, event.id, tomorrowDate)
+    upsertPlan(plan)
   }
 
   const deletePlan = (planId: string) => {
@@ -528,6 +526,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
               tasks={day.tasks}
               viewStartTime={day.settings.viewStartTime}
               viewEndTime={day.settings.viewEndTime}
+              date={selectedDate}
               onEditEvent={(event) => setEditingEventRef({ id: event.id, scope: 'actual' })}
               onCreateEvent={(time) => requestTemplateAt(time, 'actual')}
               onEditTask={(task) => setEditingTaskId(task.id)}
@@ -538,6 +537,31 @@ export function TimelinePage({ mode }: TimelinePageProps) {
           </TimelineDisplaySection>
 
           <TimelineDisplaySection title="次日计划时间轴" description="明日计划以时间轴模板展示，点击计划卡片可调整具体安排。">
+            <div className="template-reuse-bar">
+              <div>
+                <strong>复用整日计划模板</strong>
+                <span>选择编辑中心保存的整日计划，直接覆盖当前次日计划事件和人员任务。</span>
+              </div>
+              <select
+                value={selectedPlanTemplate?.id ?? ''}
+                onChange={(event) => setSelectedPlanTemplateId(event.target.value)}
+                disabled={store.dayPlanTemplates.length === 0}
+                aria-label="选择整日计划模板"
+              >
+                {store.dayPlanTemplates.length > 0 ? (
+                  store.dayPlanTemplates.map((template) => (
+                    <option value={template.id} key={template.id}>
+                      {template.name}
+                    </option>
+                  ))
+                ) : (
+                  <option value="">暂无模板</option>
+                )}
+              </select>
+              <button className="primary-button" type="button" disabled={!selectedPlanTemplate} onClick={() => selectedPlanTemplate && applyDayPlanTemplateToTomorrow(selectedPlanTemplate)}>
+                复用并覆盖当前次日计划
+              </button>
+            </div>
             <PlanTimelineBoard
               plans={tomorrowPlans}
               events={day.tomorrowEvents}
@@ -560,31 +584,29 @@ export function TimelinePage({ mode }: TimelinePageProps) {
         <EditCenterPanel
           people={store.people}
           templates={store.workTemplates}
-          tomorrowEvents={day.tomorrowEvents}
-          tomorrowPlans={tomorrowPlans}
-          viewStartTime={day.settings.viewStartTime}
-          viewEndTime={day.settings.viewEndTime}
+          dayPlanTemplates={store.dayPlanTemplates}
           peopleOptionsByRole={peopleOptionsByRole}
           onPeopleChange={updatePeople}
           onTemplatesChange={updateWorkTemplates}
-          onApplyTemplate={applyTemplateToTomorrow}
-          onEditPlan={(plan) => setEditingPlanId(plan.id)}
-          onDeletePlan={(plan) => deletePlan(plan.id)}
-          onCreatePlan={createPlanAt}
-          onEditEvent={(event) => setEditingEventRef({ id: event.id, scope: 'plan' })}
-          onCreateEvent={(time) => requestTemplateAt(time, 'plan')}
-          onPanViewRange={panRange}
-          onAddPlan={addPlan}
-          onUpdatePlan={upsertPlan}
-          onDeletePlanById={deletePlan}
+          onDayPlanTemplatesChange={updateDayPlanTemplates}
         />
       )}
 
       {editingEvent ? (
         <EventEditor
           event={editingEvent}
+          scope={editingEventRef?.scope ?? 'actual'}
+          linkedTasks={editingEventRef?.scope === 'actual' ? day.tasks.filter((task) => task.workEventId === editingEvent.id) : []}
+          linkedPlans={editingEventRef?.scope === 'plan' ? day.tomorrowPlans.filter((plan) => plan.workEventId === editingEvent.id) : []}
+          peopleOptionsByRole={peopleOptionsByRole}
           onSave={(event) => upsertEvent(event, editingEventRef?.scope ?? 'actual')}
           onDelete={(eventId) => deleteEvent(eventId, editingEventRef?.scope ?? 'actual')}
+          onAddTask={() => createTaskForEvent(editingEvent)}
+          onSaveTask={upsertTask}
+          onDeleteTask={deleteTask}
+          onAddPlan={() => createPlanForEvent(editingEvent)}
+          onSavePlan={upsertPlan}
+          onDeletePlan={deletePlan}
           onClose={() => setEditingEventRef(null)}
         />
       ) : null}
@@ -611,7 +633,6 @@ export function TimelinePage({ mode }: TimelinePageProps) {
       {templateApplyRequest ? (
         <TemplateApplyModal
           title={templateApplyRequest.scope === 'actual' ? '从模板新增今日大事件' : '从模板新增次日计划大事件'}
-          anchorTime={templateApplyRequest.time}
           templates={store.workTemplates}
           onApply={(draft) => applyTemplateDraftAt(draft, templateApplyRequest)}
           onClose={() => setTemplateApplyRequest(null)}

@@ -1,8 +1,8 @@
 import { Maximize2, Minimize2, Plus } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { TeamRole, TimelinePrecision, TimelineTask, WorkEvent } from '../types'
 import { TEAM_ROLES } from '../types'
-import { buildTicks, getItemRange, getPrecision, layoutOverlaps, minutesFromTime, snapMinutes, taskIssueSummary, timeFromMinutes } from '../utils'
+import { buildTicks, getItemRange, getPrecision, layoutOverlaps, minutesFromTime, snapMinutes, taskIssueSummary, timeFromMinutes, todayISO } from '../utils'
 
 const EVENT_BLOCK_HEIGHT = 44
 const TASK_BLOCK_HEIGHT = 76
@@ -19,11 +19,21 @@ interface TimelineBoardProps {
   viewEndTime: string
   onEditEvent: (event: WorkEvent) => void
   onCreateEvent: (time: string) => void
+  onDeleteEvent?: (event: WorkEvent) => void
   onEditTask: (task: TimelineTask) => void
   onCreateTask: (role: TeamRole, time: string) => void
   onDeleteTask?: (task: TimelineTask) => void
   onPanViewRange?: (deltaMinutes: number) => void
   stickyScale?: boolean
+  precisionOverride?: TimelinePrecision
+  date?: string
+  readOnly?: boolean
+}
+
+interface CurrentTimeMarker {
+  left: number
+  time: string
+  tooltip: string
 }
 
 export function TimelineBoard({
@@ -33,14 +43,19 @@ export function TimelineBoard({
   viewEndTime,
   onEditEvent,
   onCreateEvent,
+  onDeleteEvent,
   onEditTask,
   onCreateTask,
   onDeleteTask,
   onPanViewRange,
   stickyScale = true,
+  precisionOverride,
+  date,
+  readOnly = false,
 }: TimelineBoardProps) {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set())
   const [isPanning, setIsPanning] = useState(false)
+  const [currentMinute, setCurrentMinute] = useState(() => getCurrentMinute())
   const gridRef = useRef<HTMLDivElement | null>(null)
   const scaleRef = useRef<HTMLDivElement | null>(null)
   const wheelRemainderRef = useRef(0)
@@ -52,11 +67,33 @@ export function TimelineBoard({
     active: boolean
     captured: boolean
   } | null>(null)
-  const precision = getPrecision(viewStartTime, viewEndTime)
+  const precision = precisionOverride ?? getPrecision(viewStartTime, viewEndTime)
   const ticks = buildTicks(viewStartTime, viewEndTime, precision)
+  const visualMinorTicks = buildVisualMinorTicks(viewStartTime, viewEndTime, precision, ticks)
   const showRoleRows = precision !== 'overview'
   const eventDisplayItems = precision === 'overview' ? groupEventsForOverview(events) : events.map((event) => ({ ...event, sourceEvent: event }))
   const eventLaneMap = getStableEventLaneMap(events)
+  const currentTimeMarker = useMemo(
+    () => buildCurrentTimeMarker(date, currentMinute, viewStartTime, viewEndTime, tasks),
+    [currentMinute, date, tasks, viewEndTime, viewStartTime],
+  )
+
+  useEffect(() => {
+    if (date !== todayISO()) return
+
+    const syncTimer = window.setTimeout(() => {
+      setCurrentMinute(getCurrentMinute())
+    }, 0)
+    const timer = window.setInterval(() => {
+      setCurrentMinute(getCurrentMinute())
+    }, 60 * 1000)
+
+    return () => {
+      window.clearTimeout(syncTimer)
+      window.clearInterval(timer)
+    }
+  }, [date])
+
   const toggleExpanded = (rowKey: string) => {
     setExpandedRows((current) => {
       const next = new Set(current)
@@ -100,7 +137,7 @@ export function TimelineBoard({
   }
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!onPanViewRange || event.button !== 0) return
+    if (readOnly || !onPanViewRange || event.button !== 0) return
     const target = event.target as HTMLElement
     if (target.closest('button, input, textarea, select, a, .timeline-block, .timeline-block-wrap')) return
 
@@ -158,6 +195,11 @@ export function TimelineBoard({
     event.stopPropagation()
     clickSuppressionRef.current = false
   }
+  const confirmDeleteEvent = (event: WorkEvent) => {
+    if (window.confirm(`确认删除“${event.name}”？绑定的人员任务也会一起删除。`)) {
+      onDeleteEvent?.(event)
+    }
+  }
 
   return (
     <section className={`timeline-shell ${stickyScale ? 'timeline-shell-sticky' : ''}`}>
@@ -173,6 +215,10 @@ export function TimelineBoard({
       >
         <div className="timeline-label timeline-label-head">时间刻度</div>
         <div className="timeline-scale" ref={scaleRef}>
+          {visualMinorTicks.map((tick) => {
+            const left = getItemRange({ startTime: tick, endTime: tick }, viewStartTime, viewEndTime).left
+            return <span className="timeline-minor-tick" style={{ left: `${left}%` }} key={`minor-${tick}`} />
+          })}
           {ticks.map((tick) => {
             const left = getItemRange({ startTime: tick, endTime: tick }, viewStartTime, viewEndTime).left
             return (
@@ -181,6 +227,16 @@ export function TimelineBoard({
               </span>
             )
           })}
+          {currentTimeMarker ? (
+            <span
+              className="timeline-now-marker timeline-now-scale"
+              style={{ left: `${currentTimeMarker.left}%` }}
+              data-tooltip={currentTimeMarker.tooltip}
+              title={currentTimeMarker.tooltip}
+            >
+              <span>{currentTimeMarker.time}</span>
+            </span>
+          ) : null}
         </div>
 
         <TimelineRowLabel label="工作事件" expanded={expandedRows.has('events')} onToggle={() => toggleExpanded('events')} />
@@ -190,15 +246,28 @@ export function TimelineBoard({
           precision={precision}
           viewStartTime={viewStartTime}
           viewEndTime={viewEndTime}
-          emptyLabel="双击新增工作事件"
           blockHeight={expandedRows.has('events') ? EVENT_BLOCK_HEIGHT + 44 : EVENT_BLOCK_HEIGHT}
           laneGap={EVENT_LANE_GAP}
           getLaneKey={(event) => event.name}
           stableLaneMap={eventLaneMap}
           stableLaneCount={3}
+          currentTimeMarker={currentTimeMarker}
+          readOnly={readOnly}
+          emptyLabel={readOnly ? '暂无模板阶段' : '双击新增工作事件'}
           onDoubleClick={(time) => onCreateEvent(time)}
           renderItem={(event) => (
-            <button className={`timeline-block event-block phase-${event.phase}`} type="button" onClick={() => onEditEvent(event.sourceEvent)}>
+            <button
+              className={`timeline-block event-block phase-${event.phase} ${readOnly ? 'timeline-block-readonly' : ''}`}
+              type="button"
+              onClick={() => {
+                if (!readOnly) onEditEvent(event.sourceEvent)
+              }}
+              onContextMenu={(contextEvent) => {
+                if (readOnly || !onDeleteEvent) return
+                contextEvent.preventDefault()
+                confirmDeleteEvent(event.sourceEvent)
+              }}
+            >
               <span className="event-title-line">
                 <span className="block-title">{event.name}</span>
                 <span className="event-time">
@@ -225,6 +294,8 @@ export function TimelineBoard({
                 onCreateTask={onCreateTask}
                 onEditTask={onEditTask}
                 onDeleteTask={onDeleteTask}
+                currentTimeMarker={currentTimeMarker}
+                readOnly={readOnly}
               />
             ))
           : null}
@@ -245,6 +316,8 @@ interface LaneProps<T extends { id: string; startTime: string; endTime: string }
   getLaneKey?: (item: T) => string
   stableLaneMap?: Map<string, number>
   stableLaneCount?: number
+  currentTimeMarker?: CurrentTimeMarker | null
+  readOnly?: boolean
   onDoubleClick: (time: string) => void
   renderItem: (item: T) => React.ReactNode
 }
@@ -261,6 +334,8 @@ function TimelineLane<T extends { id: string; startTime: string; endTime: string
   getLaneKey,
   stableLaneMap,
   stableLaneCount = 0,
+  currentTimeMarker,
+  readOnly = false,
   onDoubleClick,
   renderItem,
 }: LaneProps<T>) {
@@ -271,6 +346,8 @@ function TimelineLane<T extends { id: string; startTime: string; endTime: string
   const height = Math.max(blockHeight + 16, laneCount * laneStep + 14)
 
   const handleDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (readOnly) return
+
     const target = event.currentTarget
     const rect = target.getBoundingClientRect()
     const ratio = (event.clientX - rect.left) / rect.width
@@ -283,9 +360,17 @@ function TimelineLane<T extends { id: string; startTime: string; endTime: string
   return (
     <div className={`timeline-lane ${className ?? ''}`} style={{ minHeight: height }} onDoubleClick={handleDoubleClick}>
       <div className="lane-grid-lines" />
+      {currentTimeMarker ? (
+        <span
+          className="timeline-now-marker timeline-now-lane"
+          style={{ left: `${currentTimeMarker.left}%` }}
+          data-tooltip={currentTimeMarker.tooltip}
+          title={currentTimeMarker.tooltip}
+        />
+      ) : null}
       {layout.length === 0 ? (
-        <span className="lane-empty">
-          <Plus size={14} /> {emptyLabel}
+        <span className={`lane-empty ${readOnly ? 'lane-empty-readonly' : ''}`}>
+          {readOnly ? null : <Plus size={14} />} {emptyLabel}
         </span>
       ) : null}
       {layout.map(({ item, lane }) => {
@@ -321,6 +406,8 @@ function TimelineRoleLane({
   onCreateTask,
   onEditTask,
   onDeleteTask,
+  currentTimeMarker,
+  readOnly,
 }: {
   role: TeamRole
   tasks: TimelineTask[]
@@ -332,6 +419,8 @@ function TimelineRoleLane({
   onCreateTask: (role: TeamRole, time: string) => void
   onEditTask: (task: TimelineTask) => void
   onDeleteTask?: (task: TimelineTask) => void
+  currentTimeMarker?: CurrentTimeMarker | null
+  readOnly?: boolean
 }) {
   const confirmDeleteTask = (task: TimelineTask) => {
     if (window.confirm(`确认删除“${task.content}”？`)) {
@@ -347,15 +436,20 @@ function TimelineRoleLane({
         precision={precision}
         viewStartTime={viewStartTime}
         viewEndTime={viewEndTime}
-        emptyLabel={`双击新增${role}任务`}
+        emptyLabel={readOnly ? `${role}暂无分配` : `双击新增${role}任务`}
         blockHeight={expanded ? TASK_BLOCK_HEIGHT + 76 : TASK_BLOCK_HEIGHT}
         onDoubleClick={(time) => onCreateTask(role, time)}
+        currentTimeMarker={currentTimeMarker}
+        readOnly={readOnly}
         renderItem={(task) => (
           <button
-            className={`timeline-block task-block status-${task.status}`}
+            className={`timeline-block task-block status-${task.status} ${readOnly ? 'timeline-block-readonly' : ''}`}
             type="button"
-            onClick={() => onEditTask(task)}
+            onClick={() => {
+              if (!readOnly) onEditTask(task)
+            }}
             onContextMenu={(event) => {
+              if (readOnly) return
               event.preventDefault()
               if (onDeleteTask) confirmDeleteTask(task)
             }}
@@ -375,6 +469,65 @@ function TimelineRoleLane({
       />
     </>
   )
+}
+
+function getCurrentMinute(): number {
+  const now = new Date()
+  return now.getHours() * 60 + now.getMinutes()
+}
+
+function buildVisualMinorTicks(viewStartTime: string, viewEndTime: string, precision: TimelinePrecision, majorTicks: string[]): string[] {
+  const step = precision === 'hour' ? 30 : precision === 'quarter' ? 15 : 0
+  if (!step) return []
+
+  const start = minutesFromTime(viewStartTime)
+  const end = minutesFromTime(viewEndTime)
+  const majorTickSet = new Set(majorTicks)
+  const minorTicks: string[] = []
+
+  for (let current = Math.ceil(start / step) * step; current < end; current += step) {
+    const tick = timeFromMinutes(current)
+    if (current > start && !majorTickSet.has(tick)) {
+      minorTicks.push(tick)
+    }
+  }
+
+  return minorTicks
+}
+
+function buildCurrentTimeMarker(
+  date: string | undefined,
+  currentMinute: number,
+  viewStartTime: string,
+  viewEndTime: string,
+  tasks: TimelineTask[],
+): CurrentTimeMarker | null {
+  if (date !== todayISO()) return null
+
+  const viewStart = minutesFromTime(viewStartTime)
+  const viewEnd = minutesFromTime(viewEndTime)
+  if (currentMinute < viewStart || currentMinute > viewEnd) return null
+
+  const viewDuration = Math.max(1, viewEnd - viewStart)
+  const time = timeFromMinutes(currentMinute)
+  const activeTasks = tasks.filter((task) => {
+    const taskStart = minutesFromTime(task.startTime)
+    const taskEnd = minutesFromTime(task.endTime)
+    return taskStart <= currentMinute && currentMinute < taskEnd
+  })
+  const taskText =
+    activeTasks.length > 0
+      ? activeTasks
+          .slice(0, 3)
+          .map((task) => `${task.role}：${task.content}`)
+          .join(' / ')
+      : '暂无进行中任务'
+
+  return {
+    left: ((currentMinute - viewStart) / viewDuration) * 100,
+    time,
+    tooltip: `${time} · ${taskText}`,
+  }
 }
 
 interface EventDisplayItem extends WorkEvent {

@@ -13,6 +13,7 @@ interface TimeRangeSliderProps {
 type DragMode = 'move' | 'left' | 'right'
 const HORIZONTAL_WHEEL_RATIO = 1.25
 const MIN_HORIZONTAL_WHEEL_DELTA = 4
+const MIN_VIEW_DURATION = 15
 
 export function TimeRangeSlider({
   workStartTime,
@@ -25,20 +26,23 @@ export function TimeRangeSlider({
   const wheelRemainderRef = useRef(0)
   const [drag, setDrag] = useState<{ mode: DragMode; startX: number; startViewStart: number; startViewEnd: number } | null>(null)
 
-  const bounds = useMemo(
-    () => ({
-      min: minutesFromTime(workStartTime),
-      max: Math.max(minutesFromTime(workStartTime) + 30, minutesFromTime(actualEndTime)),
-      start: minutesFromTime(viewStartTime),
-      end: minutesFromTime(viewEndTime),
-    }),
-    [actualEndTime, viewEndTime, viewStartTime, workStartTime],
-  )
+  const bounds = useMemo(() => {
+    const min = minutesFromTime(workStartTime)
+    const max = Math.max(min + 30, minutesFromTime(actualEndTime))
+    const range = constrainRange(minutesFromTime(viewStartTime), minutesFromTime(viewEndTime), min, max)
+
+    return {
+      min,
+      max,
+      start: range.start,
+      end: range.end,
+    }
+  }, [actualEndTime, viewEndTime, viewStartTime, workStartTime])
 
   const total = Math.max(1, bounds.max - bounds.min)
-  const left = ((bounds.start - bounds.min) / total) * 100
-  const width = ((bounds.end - bounds.start) / total) * 100
-  const precision = getPrecision(viewStartTime, viewEndTime)
+  const left = clamp(((bounds.start - bounds.min) / total) * 100, 0, 100)
+  const width = clamp(((bounds.end - bounds.start) / total) * 100, 0, 100 - left)
+  const precision = getPrecision(timeFromMinutes(bounds.start), timeFromMinutes(bounds.end))
   const ticks = buildSliderTicks(bounds.min, bounds.max)
 
   useEffect(() => {
@@ -49,25 +53,25 @@ export function TimeRangeSlider({
       if (!track) return
       const pixels = track.getBoundingClientRect().width || 1
       const deltaMinutes = Math.round(((event.clientX - drag.startX) / pixels) * total)
-      const minDuration = 15
       let nextStart = drag.startViewStart
       let nextEnd = drag.startViewEnd
 
       if (drag.mode === 'move') {
-        const duration = drag.startViewEnd - drag.startViewStart
-        nextStart = clamp(drag.startViewStart + deltaMinutes, bounds.min, bounds.max - duration)
-        nextEnd = nextStart + duration
+        const nextRange = constrainMovedRange(drag.startViewStart, drag.startViewEnd, deltaMinutes, bounds.min, bounds.max)
+        nextStart = nextRange.start
+        nextEnd = nextRange.end
       }
 
       if (drag.mode === 'left') {
-        nextStart = clamp(drag.startViewStart + deltaMinutes, bounds.min, drag.startViewEnd - minDuration)
+        nextStart = clamp(drag.startViewStart + deltaMinutes, bounds.min, drag.startViewEnd - MIN_VIEW_DURATION)
       }
 
       if (drag.mode === 'right') {
-        nextEnd = clamp(drag.startViewEnd + deltaMinutes, drag.startViewStart + minDuration, bounds.max)
+        nextEnd = clamp(drag.startViewEnd + deltaMinutes, drag.startViewStart + MIN_VIEW_DURATION, bounds.max)
       }
 
-      onChange({ viewStartTime: timeFromMinutes(nextStart), viewEndTime: timeFromMinutes(nextEnd) })
+      const nextRange = constrainRange(nextStart, nextEnd, bounds.min, bounds.max)
+      onChange({ viewStartTime: timeFromMinutes(nextRange.start), viewEndTime: timeFromMinutes(nextRange.end) })
     }
 
     const handleUp = () => setDrag(null)
@@ -92,9 +96,8 @@ export function TimeRangeSlider({
   }
 
   const moveWindow = (deltaMinutes: number) => {
-    const duration = bounds.end - bounds.start
-    const nextStart = clamp(bounds.start + deltaMinutes, bounds.min, bounds.max - duration)
-    onChange({ viewStartTime: timeFromMinutes(nextStart), viewEndTime: timeFromMinutes(nextStart + duration) })
+    const nextRange = constrainMovedRange(bounds.start, bounds.end, deltaMinutes, bounds.min, bounds.max)
+    onChange({ viewStartTime: timeFromMinutes(nextRange.start), viewEndTime: timeFromMinutes(nextRange.end) })
   }
 
   const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
@@ -139,7 +142,7 @@ export function TimeRangeSlider({
             <GripVertical size={14} />
           </button>
           <span className="range-window-label">
-            {viewStartTime}-{viewEndTime}
+            {timeFromMinutes(bounds.start)}-{timeFromMinutes(bounds.end)}
           </span>
           <button className="range-handle range-handle-right" type="button" aria-label="调整查看范围结束时间" onPointerDown={startDrag('right')}>
             <GripVertical size={14} />
@@ -148,6 +151,28 @@ export function TimeRangeSlider({
       </div>
     </section>
   )
+}
+
+function constrainRange(start: number, end: number, min: number, max: number) {
+  const safeMax = Math.max(min + MIN_VIEW_DURATION, max)
+  const duration = clamp(Math.max(MIN_VIEW_DURATION, end - start), MIN_VIEW_DURATION, safeMax - min)
+  const nextStart = clamp(start, min, safeMax - duration)
+
+  return {
+    start: nextStart,
+    end: nextStart + duration,
+  }
+}
+
+function constrainMovedRange(start: number, end: number, deltaMinutes: number, min: number, max: number) {
+  const safeMax = Math.max(min + MIN_VIEW_DURATION, max)
+  const duration = clamp(end - start, MIN_VIEW_DURATION, safeMax - min)
+  const nextStart = clamp(start + deltaMinutes, min, safeMax - duration)
+
+  return {
+    start: nextStart,
+    end: nextStart + duration,
+  }
 }
 
 function buildSliderTicks(min: number, max: number) {

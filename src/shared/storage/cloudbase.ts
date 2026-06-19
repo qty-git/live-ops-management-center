@@ -16,11 +16,12 @@ let appPromise: Promise<CloudBaseApp | null> | null = null
 export function getCloudBaseConfig(): CloudBaseConfig {
   const envId = import.meta.env.VITE_CLOUDBASE_ENV_ID || DEFAULT_ENV_ID
   const region = import.meta.env.VITE_CLOUDBASE_REGION || DEFAULT_REGION
+  const explicitEnabled = import.meta.env.VITE_CLOUDBASE_ENABLED
 
   return {
     envId,
     region,
-    enabled: Boolean(envId),
+    enabled: explicitEnabled === undefined ? Boolean(envId) && !import.meta.env.DEV : explicitEnabled === 'true' && Boolean(envId),
   }
 }
 

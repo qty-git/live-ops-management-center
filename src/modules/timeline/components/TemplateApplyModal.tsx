@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import { Modal } from '../../../shared/components/Modal'
 import type { TeamRole, WorkEventPhase, WorkTemplate } from '../types'
-import { ensureEndAfterStart, minutesFromTime, timeFromMinutes } from '../utils'
+import { ensureEndAfterStart } from '../utils'
 import { TimeInput } from './TimeInput'
 
 export interface TemplateApplyStageDraft {
   id: string
+  eventName?: string
   phase: WorkEventPhase
   enabled: boolean
   startTime: string
@@ -32,24 +33,23 @@ export interface TemplateApplyDraft {
 
 interface TemplateApplyModalProps {
   title: string
-  anchorTime: string
   templates: WorkTemplate[]
   onApply: (draft: TemplateApplyDraft) => void
   onClose: () => void
 }
 
-export function TemplateApplyModal({ title, anchorTime, templates, onApply, onClose }: TemplateApplyModalProps) {
+export function TemplateApplyModal({ title, templates, onApply, onClose }: TemplateApplyModalProps) {
   const [selectedTemplateId, setSelectedTemplateId] = useState(templates[0]?.id ?? '')
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.id === selectedTemplateId) ?? templates[0],
     [selectedTemplateId, templates],
   )
-  const [draft, setDraft] = useState<TemplateApplyDraft>(() => buildDraft(templates[0], anchorTime))
+  const [draft, setDraft] = useState<TemplateApplyDraft>(() => buildDraft(templates[0]))
 
   const switchTemplate = (templateId: string) => {
     const template = templates.find((item) => item.id === templateId)
     setSelectedTemplateId(templateId)
-    setDraft(buildDraft(template, anchorTime))
+    setDraft(buildDraft(template))
   }
 
   const updateStage = (stage: TemplateApplyStageDraft) => {
@@ -78,14 +78,14 @@ export function TemplateApplyModal({ title, anchorTime, templates, onApply, onCl
             取消
           </button>
           <button className="primary-button" type="button" onClick={() => onApply(draft)} disabled={!selectedTemplate || enabledStages.length === 0}>
-            生成大事件和人员任务
+            生成大事件计划
           </button>
         </>
       }
     >
       <div className="template-apply-form">
         <label>
-          调用模板
+          调用大事件模板
           <select value={draft.templateId} onChange={(event) => switchTemplate(event.target.value)}>
             {templates.map((template) => (
               <option value={template.id} key={template.id}>
@@ -153,7 +153,7 @@ export function TemplateApplyModal({ title, anchorTime, templates, onApply, onCl
   )
 }
 
-function buildDraft(template: WorkTemplate | undefined, anchorTime: string): TemplateApplyDraft {
+function buildDraft(template: WorkTemplate | undefined): TemplateApplyDraft {
   if (!template) {
     return {
       templateId: '',
@@ -164,26 +164,19 @@ function buildDraft(template: WorkTemplate | undefined, anchorTime: string): Tem
     }
   }
 
-  const enabledStages = template.stages.filter((stage) => stage.enabled)
-  const earliest = Math.min(...(enabledStages.length ? enabledStages : template.stages).map((stage) => minutesFromTime(stage.startTime)))
-  const offset = minutesFromTime(anchorTime) - earliest
-
   return {
     templateId: template.id,
     name: template.name,
     note: template.note,
-    stages: template.stages.map((stage) => {
-      const start = minutesFromTime(stage.startTime) + offset
-      const end = minutesFromTime(stage.endTime) + offset
-      return {
-        id: stage.id,
-        phase: stage.phase,
-        enabled: stage.enabled,
-        startTime: timeFromMinutes(start),
-        endTime: ensureEndAfterStart(timeFromMinutes(start), timeFromMinutes(end)),
-        note: stage.note,
-      }
-    }),
+    stages: template.stages.map((stage) => ({
+      id: stage.id,
+      eventName: stage.eventName,
+      phase: stage.phase,
+      enabled: stage.enabled,
+      startTime: stage.startTime,
+      endTime: ensureEndAfterStart(stage.startTime, stage.endTime),
+      note: stage.note,
+    })),
     assignments: template.assignments.map((assignment) => ({ ...assignment })),
   }
 }
