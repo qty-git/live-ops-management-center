@@ -152,6 +152,9 @@ export function UserManagementPage({ currentUser, onUsersChanged }: UserManageme
             <span><strong>{disabledUserCount}</strong> 已禁用</span>
           </div>
         </div>
+        <p className="user-table-scroll-hint">
+          <span aria-hidden="true">↔</span> 左右滑动查看更多账号字段，操作列始终可见
+        </p>
         <div className="table-wrap user-table-wrap">
           <table className="user-table">
             <thead>
@@ -164,7 +167,7 @@ export function UserManagementPage({ currentUser, onUsersChanged }: UserManageme
                 <th>绑定人员</th>
                 <th>状态</th>
                 <th>最近登录时间</th>
-                <th>操作</th>
+                <th className="user-actions-heading">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -181,11 +184,11 @@ export function UserManagementPage({ currentUser, onUsersChanged }: UserManageme
                     <td><code>{user.username}</code></td>
                     <td>{user.phone || '-'}</td>
                     <td><span className={`account-role account-role-${user.role}`}>{ROLE_LABELS[user.role]}</span></td>
-                    <td>{user.position}</td>
+                    <td><span className="account-position">{user.position}</span></td>
                     <td>{user.personId ? personNames.get(user.personId) ?? '绑定人员已移除' : '-'}</td>
                     <td><span className={`account-status account-status-${user.status}`}>{user.status === 'active' ? '已启用' : '已禁用'}</span></td>
                     <td>{formatDateTime(user.lastLoginAt)}</td>
-                    <td>
+                    <td className="user-actions-cell">
                       <div className="user-actions">
                         {canManageUsers && targetAllowed ? (
                           <button className="table-action table-action-neutral" type="button" onClick={() => setEditingUser(user)} title="编辑资料">
