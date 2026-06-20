@@ -1,8 +1,8 @@
 # 直播运营管理中台项目交接
 
 最后更新：2026-06-20
-当前分支：`codex/ui-date-issue-edits`
-阶段状态：阶段 1–8 已完成全量测试收口，等待用户确认后提交稳定版本
+当前分支：`codex/style-split`
+阶段状态：阶段 1–8 稳定版本已提交并推送；CSS 搬家式拆分已完成验证，等待独立提交
 
 ## 1. 项目目标
 
@@ -12,9 +12,9 @@
 
 - 技术栈：React 19、TypeScript、Vite 8、CloudBase JS SDK。
 - 稳定线上分支：`main`，本轮未修改、未合并、未部署。
-- 当前开发分支：`codex/ui-date-issue-edits`。
-- 阶段 1 至 8 的全部改动仍未提交、未推送、未部署。
-- 本轮开始前提交：`a98aa9f feat: refine edit center templates`。
+- 阶段 1–8 稳定分支：`codex/ui-date-issue-edits`，提交 `db04b72` 已推送远端。
+- 当前开发分支：`codex/style-split`，从 `db04b72` 创建。
+- CSS 拆分改动尚未提交、未推送、未部署。
 - 时间轴业务数据继续使用 `live-ops-management.timeline.v1`，CloudBase 仍同步 `timeline_stores/main`。
 - users 仍使用独立键 `live-ops-management.users.v1`，内部结构升级为 v3；session 使用原独立键，内部结构升级为 v4。
 - 阶段 4/5 未修改时间轴数据结构、业务存储键、CloudBase 集合、文档 ID、匿名登录或同步时序。
@@ -237,14 +237,15 @@ src/
 ## 12. 新对话交接说明
 
 ```markdown
-当前分支：codex/ui-date-issue-edits
+当前分支：codex/style-split
 
-阶段 1–8 已完成全量测试收口，lint/build/git diff check 已通过，全部改动仍未提交、未推送、未部署。请先阅读 PROJECT_HANDOFF.md 并检查 git status。
+阶段 1–8 稳定提交 db04b72 已推送。CSS 已按原顺序拆分为 10 个模块，字节一致性、lint、build、git diff check 和 1280px 视觉冒烟均通过。请先阅读 PROJECT_HANDOFF.md 并检查 git status。
 
 下一轮只执行：
-- 等待用户确认是否提交稳定版本
-- 用户确认后重新执行提交前检查并提交
-- 提交后按独立新分支处理 CSS 拆分、账号表格、权限抽屉和 UI 高级化
+- 确认 CSS 拆分提交状态与工作区清洁度
+- 从 CSS 拆分提交创建 `codex/account-table-ux`
+- 只处理账号表格横向滚动、操作分组和状态展示
+- 权限抽屉和整体 UI 高级化继续使用后续独立分支
 - 推送和部署继续等待单独确认
 
 重要约束：
@@ -308,7 +309,7 @@ src/
 
 ### 13.6 是否建议提交
 
-建议进入 git commit 保存稳定版本。未经用户确认，不执行 commit、push 或部署。
+稳定版本已提交为 `db04b72` 并推送至 `origin/codex/ui-date-issue-edits`。
 
 ### 13.7 后续独立分支计划
 
@@ -317,3 +318,38 @@ src/
 3. `codex/permission-drawer`：只将权限编辑容器改为右侧抽屉，不改权限字段或保存逻辑。
 4. `codex/ui-polish-v2`：按页面分批进行整体 UI 高级化，不混入权限或 CloudBase 大改。
 5. `codex/pre-deploy-check`：最终检查登录、角色权限、视角、时间轴、CloudBase 和部署配置；未经确认不部署。
+
+## 14. CSS 搬家式拆分（2026-06-20）
+
+### 14.1 分支与范围
+
+- 分支：`codex/style-split`，基于稳定提交 `db04b72`。
+- 只移动 CSS，不修改视觉、选择器、声明、class 名、React 组件或业务逻辑。
+- `src/index.css` 从 4,865 行缩减为 10 行顺序导入，`App.tsx` 继续使用原入口路径。
+
+### 14.2 样式模块
+
+- `src/styles/base.css`：变量与全局基础规则。
+- `src/styles/layout.css`：应用外壳和基础侧栏布局。
+- `src/styles/timeline.css`：时间轴、顶部控制和数据区基础样式。
+- `src/styles/editor.css`：弹窗、表单和早期编辑区样式。
+- `src/styles/polish.css`：原 SaaS polish 层。
+- `src/styles/edit-center.css`：编辑中心工作区细化样式。
+- `src/styles/auth.css`：登录、侧栏账号、视角切换和无权限页样式。
+- `src/styles/task-permissions.css`：本人任务高亮和任务权限提示。
+- `src/styles/account.css`：账号与权限页基础样式。
+- `src/styles/interaction-polish.css`：阶段 8 交互与视觉收口覆盖层。
+
+### 14.3 验证结果
+
+- 十个模块按导入顺序拼接后与 `git show db04b72:src/index.css` 字节完全一致：通过（84,759 字符）。
+- `npm run lint`：通过。
+- `npm run build`：通过；构建 CSS 仍为 `index-DOKv1m4D.css`，66.16 kB，说明产物未发生样式内容变化。
+- `git diff --check`：通过。
+- 1280 × 720 浏览器冒烟：时间轴、账号表格、权限弹窗、浅蓝成员视角提示和“我的任务”高亮均正常。
+- 页面级横向溢出：无；账号表格继续在局部容器内横向滚动。
+- 浏览器控制台：无应用错误。
+
+### 14.4 下一步
+
+CSS 拆分提交后，从该提交创建 `codex/account-table-ux`。下一分支只处理账号表格体验，不修改 users 数据结构、权限保存逻辑或 `realUser / viewUser / effectiveUser` 边界。
