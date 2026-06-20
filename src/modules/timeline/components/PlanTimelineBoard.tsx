@@ -12,6 +12,7 @@ interface PlanTimelineBoardProps {
   onEditEvent: (event: WorkEvent) => void
   onCreateEvent: (time: string) => void
   onPanViewRange?: (deltaMinutes: number) => void
+  structureReadOnly?: boolean
 }
 
 export function PlanTimelineBoard({
@@ -25,6 +26,7 @@ export function PlanTimelineBoard({
   onEditEvent,
   onCreateEvent,
   onPanViewRange,
+  structureReadOnly = false,
 }: PlanTimelineBoardProps) {
   const planTasks: TimelineTask[] = plans.map((plan) => ({
     id: `plan-task-${plan.id}`,
@@ -61,6 +63,7 @@ export function PlanTimelineBoard({
       }}
       onCreateTask={onCreatePlan}
       onPanViewRange={onPanViewRange}
+      structureReadOnly={structureReadOnly}
     />
   )
 }

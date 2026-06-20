@@ -33,6 +33,10 @@ export function TimeInput({ value, onChange, readOnly = false, ariaLabel }: Time
   }
 
   const commit = () => {
+    if (readOnly) {
+      setDraft(value)
+      return
+    }
     const normalized = normalizeCompactTimeInput(draft)
     if (normalized) {
       setDraft(normalized)

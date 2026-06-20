@@ -3,9 +3,10 @@ import type { ComparisonRow } from '../types'
 interface ComparisonTableProps {
   rows: ComparisonRow[]
   onNoteChange: (key: string, patch: { deviationReason?: string; tomorrowSuggestion?: string }) => void
+  canEdit: boolean
 }
 
-export function ComparisonTable({ rows, onNoteChange }: ComparisonTableProps) {
+export function ComparisonTable({ rows, onNoteChange, canEdit }: ComparisonTableProps) {
   return (
     <section className="data-section">
       <div className="section-header">
@@ -46,6 +47,7 @@ export function ComparisonTable({ rows, onNoteChange }: ComparisonTableProps) {
                     value={row.deviationReason}
                     onChange={(e) => onNoteChange(row.key, { deviationReason: e.target.value })}
                     placeholder="填写偏差原因"
+                    readOnly={!canEdit}
                   />
                 </td>
                 <td>
@@ -53,6 +55,7 @@ export function ComparisonTable({ rows, onNoteChange }: ComparisonTableProps) {
                     value={row.tomorrowSuggestion}
                     onChange={(e) => onNoteChange(row.key, { tomorrowSuggestion: e.target.value })}
                     placeholder="填写优化建议"
+                    readOnly={!canEdit}
                   />
                 </td>
               </tr>

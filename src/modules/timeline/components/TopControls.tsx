@@ -9,9 +9,11 @@ interface TopControlsProps {
   onSettingsChange: (settings: TimelineSettings) => void
   onCopyYesterdayPlan: () => void
   onExportExcel: () => void
+  canManageTimeline: boolean
+  canExport: boolean
 }
 
-export function TopControls({ settings, saveStatus, hasRecordOnDate, onSettingsChange, onCopyYesterdayPlan, onExportExcel }: TopControlsProps) {
+export function TopControls({ settings, saveStatus, hasRecordOnDate, onSettingsChange, onCopyYesterdayPlan, onExportExcel, canManageTimeline, canExport }: TopControlsProps) {
   const update = <K extends keyof TimelineSettings>(key: K, value: TimelineSettings[K]) => {
     onSettingsChange({ ...settings, [key]: value })
   }
@@ -29,22 +31,24 @@ export function TopControls({ settings, saveStatus, hasRecordOnDate, onSettingsC
         </label>
         <label>
           工作开始
-          <input type="time" value={settings.workStartTime} onChange={(e) => update('workStartTime', e.target.value)} />
+          <input type="time" value={settings.workStartTime} onChange={(e) => update('workStartTime', e.target.value)} disabled={!canManageTimeline} />
         </label>
         <label>
           标准结束
-          <input type="time" value={settings.standardEndTime} onChange={(e) => update('standardEndTime', e.target.value)} />
+          <input type="time" value={settings.standardEndTime} onChange={(e) => update('standardEndTime', e.target.value)} disabled={!canManageTimeline} />
         </label>
         <label>
           实际结束
-          <input type="time" value={settings.actualEndTime} onChange={(e) => update('actualEndTime', e.target.value)} />
+          <input type="time" value={settings.actualEndTime} onChange={(e) => update('actualEndTime', e.target.value)} disabled={!canManageTimeline} />
         </label>
-        <button className="secondary-button" type="button" onClick={onCopyYesterdayPlan}>
+        <button className="secondary-button" type="button" onClick={onCopyYesterdayPlan} disabled={!canManageTimeline}>
           <CopyPlus size={16} /> 一键填入昨日计划
         </button>
-        <button className="secondary-button" type="button" onClick={onExportExcel}>
-          <Download size={16} /> 导出 Excel
-        </button>
+        {canExport ? (
+          <button className="secondary-button" type="button" onClick={onExportExcel}>
+            <Download size={16} /> 导出 Excel
+          </button>
+        ) : null}
         <span className="save-status">
           <Save size={15} /> {saveStatus}
         </span>

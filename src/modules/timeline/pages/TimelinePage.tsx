@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { requirePermission } from '../../auth/accessControl'
+import { hasPermission } from '../../auth/permissions'
+import type { AuthUser } from '../../auth/types'
 import { ComparisonTable } from '../components/ComparisonTable'
 import { EditCenterPanel } from '../components/EditCenterPanel'
 import { EventEditor } from '../components/EventEditor'
@@ -26,6 +29,7 @@ import type {
   WorkEvent,
   WorkTemplate,
 } from '../types'
+import { getTaskEditAccess, isOwnTask, restrictTaskUpdate } from '../taskAccess'
 import {
   addDays,
   buildComparisonRows,
@@ -52,9 +56,10 @@ const defaultPeopleByRole: Record<TeamRole, string> = {
 
 interface TimelinePageProps {
   mode: TimelinePageMode
+  currentUser: AuthUser
 }
 
-export function TimelinePage({ mode }: TimelinePageProps) {
+export function TimelinePage({ mode, currentUser }: TimelinePageProps) {
   const initialDate = todayISO()
   const [selectedDate, setSelectedDate] = useState(initialDate)
   const [store, setStore] = useState<TimelineStore>(() => loadTimelineStore())
@@ -64,6 +69,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
   const [templateApplyRequest, setTemplateApplyRequest] = useState<TemplateApplyRequest | null>(null)
   const [selectedPlanTemplateId, setSelectedPlanTemplateId] = useState('')
+  const [permissionMessage, setPermissionMessage] = useState('')
   const cloudReadyRef = useRef(false)
   const cloudSaveTimerRef = useRef<number | null>(null)
 
@@ -88,12 +94,20 @@ export function TimelinePage({ mode }: TimelinePageProps) {
       ? day.tomorrowEvents.find((event) => event.id === editingEventRef.id)
       : day.events.find((event) => event.id === editingEventRef?.id)
   const editingTask = day.tasks.find((task) => task.id === editingTaskId)
+  const editingTaskAccess = editingTask ? getTaskEditAccess(editingTask, currentUser, store.people) : null
   const editingPlan = day.tomorrowPlans.find((plan) => plan.id === editingPlanId)
   const peopleOptionsByRole = useMemo(() => buildPeopleOptionsByRole(day, store.people), [day, store.people])
   const selectedPlanTemplate = useMemo(
     () => store.dayPlanTemplates.find((template) => template.id === selectedPlanTemplateId) ?? store.dayPlanTemplates[0],
     [selectedPlanTemplateId, store.dayPlanTemplates],
   )
+  const canManageTimeline = hasPermission(currentUser, 'timeline:manage')
+  const canEditMembers = hasPermission(currentUser, 'people:manage')
+  const canEditEventTemplates = hasPermission(currentUser, 'event_templates:edit')
+  const canEditDayTemplates = hasPermission(currentUser, 'day_plan_templates:edit')
+  const canExport = hasPermission(currentUser, 'exports:use')
+  const shouldHighlightOwnTasks = hasPermission(currentUser, 'task:highlight_own')
+  const taskBelongsToCurrentUser = (task: TimelineTask) => shouldHighlightOwnTasks && isOwnTask(task, currentUser, store.people)
 
   useEffect(() => {
     saveTimelineStore(store)
@@ -158,6 +172,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   }, [store])
 
   useEffect(() => {
+    if (!canManageTimeline) return
     const currentDay = ensureDay(store, selectedDate)
     const hydrated = applyYesterdayPlanToDay(currentDay, selectedDate, store.days[addDays(selectedDate, -1)])
     if (!hydrated.changed) return
@@ -167,7 +182,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
       setSaveStatus(`已自动填入昨日计划 ${hydrated.addedTasks} 条`)
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [selectedDate, store])
+  }, [canManageTimeline, selectedDate, store])
 
   const updateDay = (updater: (day: TimelineDayData) => TimelineDayData) => {
     setStore((current) => {
@@ -187,6 +202,8 @@ export function TimelinePage({ mode }: TimelinePageProps) {
       setSaveStatus(`已切换到 ${settings.date}`)
       return
     }
+
+    if (!requirePermission(currentUser, 'timeline:manage', setPermissionMessage)) return
 
     updateDay((current) => ({
       ...current,
@@ -225,6 +242,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   }
 
   const updatePeople = (people: TeamPerson[]) => {
+    if (!requirePermission(currentUser, 'people:manage', setPermissionMessage)) return
     setStore((current) => ({
       ...current,
       people,
@@ -233,6 +251,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   }
 
   const updateWorkTemplates = (workTemplates: WorkTemplate[]) => {
+    if (!requirePermission(currentUser, 'event_templates:edit', setPermissionMessage)) return
     setStore((current) => ({
       ...current,
       workTemplates,
@@ -241,6 +260,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   }
 
   const updateDayPlanTemplates = (dayPlanTemplates: DayPlanTemplate[]) => {
+    if (!requirePermission(currentUser, 'day_plan_templates:edit', setPermissionMessage)) return
     setStore((current) => ({
       ...current,
       dayPlanTemplates,
@@ -249,6 +269,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   }
 
   const applyDayPlanTemplateToTomorrow = (template: DayPlanTemplate) => {
+    if (!requirePermission(currentUser, 'timeline:manage', setPermissionMessage)) return
     if ((day.tomorrowEvents.length > 0 || tomorrowPlans.length > 0) && !window.confirm('套用整日模板会替换当前次日计划事件和计划任务，确认继续？')) {
       return
     }
@@ -279,6 +300,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   }
 
   const requestTemplateAt = (time: string, scope: EventEditScope) => {
+    if (!requirePermission(currentUser, 'timeline:manage', setPermissionMessage)) return
     if (store.workTemplates.length === 0) {
       createEventAt(time, scope)
       return
@@ -287,6 +309,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   }
 
   const applyTemplateDraftAt = (draft: TemplateApplyDraft, request: TemplateApplyRequest) => {
+    if (!requirePermission(currentUser, 'timeline:manage', setPermissionMessage)) return
     const enabledStages = draft.stages.filter((stage) => stage.enabled)
     const stageEventId = new Map<string, string>()
     const eventDate = request.scope === 'actual' ? selectedDate : tomorrowDate
@@ -363,6 +386,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   }
 
   const upsertEvent = (event: WorkEvent, scope: EventEditScope = editingEventRef?.scope ?? 'actual') => {
+    if (!requirePermission(currentUser, 'timeline:manage', setPermissionMessage)) return
     updateDay((current) => ({
       ...current,
       events:
@@ -381,6 +405,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   }
 
   const deleteEvent = (eventId: string, scope: EventEditScope = editingEventRef?.scope ?? 'actual') => {
+    if (!requirePermission(currentUser, 'timeline:manage', setPermissionMessage)) return
     updateDay((current) => ({
       ...current,
       events: scope === 'actual' ? current.events.filter((event) => event.id !== eventId) : current.events,
@@ -392,6 +417,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   }
 
   const createEventAt = (time: string, scope: EventEditScope = 'actual') => {
+    if (!requirePermission(currentUser, 'timeline:manage', setPermissionMessage)) return
     const event = createEvent(selectedDate, time, day.settings.actualEndTime)
     const scopedEvent = scope === 'plan' ? { ...event, date: tomorrowDate } : event
     upsertEvent(scopedEvent, scope)
@@ -399,15 +425,35 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   }
 
   const upsertTask = (task: TimelineTask) => {
+    const original = day.tasks.find((item) => item.id === task.id)
+    if (!original) {
+      if (!canManageTimeline) {
+        setPermissionMessage('你没有权限执行此操作')
+        return
+      }
+      updateDay((current) => ({ ...current, tasks: [...current.tasks, task] }))
+      return
+    }
+
+    const access = getTaskEditAccess(original, currentUser, store.people)
+    if (!access.canEditStructure && !access.canEditFeedback) {
+      setPermissionMessage('你没有权限执行此操作')
+      return
+    }
+    const restricted = restrictTaskUpdate(original, task, access)
+    if (restricted.denied) setPermissionMessage('你没有权限执行此操作')
     updateDay((current) => ({
       ...current,
-      tasks: current.tasks.some((item) => item.id === task.id)
-        ? current.tasks.map((item) => (item.id === task.id ? task : item))
-        : [...current.tasks, task],
+      tasks: current.tasks.map((item) => (item.id === task.id ? restricted.task : item)),
     }))
   }
 
   const deleteTask = (taskId: string) => {
+    const task = day.tasks.find((item) => item.id === taskId)
+    if (!task || !getTaskEditAccess(task, currentUser, store.people).canDelete) {
+      setPermissionMessage('你没有权限执行此操作')
+      return
+    }
     updateDay((current) => ({
       ...current,
       tasks: current.tasks.filter((task) => task.id !== taskId),
@@ -416,6 +462,10 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   }
 
   const createTaskAt = (role: TeamRole, time: string) => {
+    if (!canManageTimeline) {
+      setPermissionMessage('你没有权限执行此操作')
+      return
+    }
     const event = findEventAt(day.events, time) ?? day.events[0]
     const task = createTask(selectedDate, role, event?.startTime ?? time, event?.endTime ?? day.settings.actualEndTime, event?.id ?? '')
     upsertTask(task)
@@ -428,6 +478,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   }
 
   const upsertPlan = (plan: TomorrowPlan) => {
+    if (!requirePermission(currentUser, 'timeline:manage', setPermissionMessage)) return
     updateDay((current) => ({
       ...current,
       tomorrowPlans: current.tomorrowPlans.some((item) => item.id === plan.id)
@@ -437,6 +488,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   }
 
   const createPlanAt = (role: TeamRole, time: string) => {
+    if (!requirePermission(currentUser, 'timeline:manage', setPermissionMessage)) return
     const event = findEventAt(day.tomorrowEvents, time)
     const plan = createPlan(role, event?.startTime ?? time, event?.endTime ?? day.settings.actualEndTime, event?.id ?? '', tomorrowDate)
     upsertPlan(plan)
@@ -444,11 +496,13 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   }
 
   const createPlanForEvent = (event: WorkEvent) => {
+    if (!requirePermission(currentUser, 'timeline:manage', setPermissionMessage)) return
     const plan = createPlan('运营', event.startTime, event.endTime, event.id, tomorrowDate)
     upsertPlan(plan)
   }
 
   const deletePlan = (planId: string) => {
+    if (!requirePermission(currentUser, 'timeline:manage', setPermissionMessage)) return
     updateDay((current) => ({
       ...current,
       tomorrowPlans: current.tomorrowPlans.filter((plan) => plan.id !== planId),
@@ -457,6 +511,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   }
 
   const copyYesterdayPlan = () => {
+    if (!requirePermission(currentUser, 'timeline:manage', setPermissionMessage)) return
     const hydrated = applyYesterdayPlanToDay(day, selectedDate, previousDay)
 
     if (!hydrated.changed) {
@@ -469,6 +524,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   }
 
   const updateComparisonNote = (comparisonKey: string, patch: { deviationReason?: string; tomorrowSuggestion?: string }) => {
+    if (!requirePermission(currentUser, 'timeline:manage', setPermissionMessage)) return
     updateDay((current) => {
       const existing = current.comparisonNotes.find((note) => note.comparisonKey === comparisonKey)
       const nextNote: ComparisonNote = {
@@ -489,16 +545,28 @@ export function TimelinePage({ mode }: TimelinePageProps) {
   }
 
   const exportExcel = async () => {
-    await exportTimelineExcel({
-      date: selectedDate,
-      day,
-      comparisonRows,
-      plansForTomorrow: tomorrowPlans,
-    })
+    if (!requirePermission(currentUser, 'exports:use', setPermissionMessage)) return
+    try {
+      await exportTimelineExcel({
+        user: currentUser,
+        date: selectedDate,
+        day,
+        comparisonRows,
+        plansForTomorrow: tomorrowPlans,
+      })
+    } catch (error) {
+      setPermissionMessage(error instanceof Error ? error.message : '导出失败')
+    }
   }
 
   return (
     <main className="timeline-page">
+      {permissionMessage ? (
+        <div className="page-notice page-notice-error timeline-permission-notice" role="alert">
+          <span>{permissionMessage}</span>
+          <button type="button" onClick={() => setPermissionMessage('')}>关闭</button>
+        </div>
+      ) : null}
       {mode === 'dashboard' ? (
         <>
           <TopControls
@@ -508,6 +576,8 @@ export function TimelinePage({ mode }: TimelinePageProps) {
             onSettingsChange={updateSettings}
             onCopyYesterdayPlan={copyYesterdayPlan}
             onExportExcel={exportExcel}
+            canManageTimeline={canManageTimeline}
+            canExport={canExport}
           />
 
           <div className="shared-range-panel">
@@ -533,6 +603,8 @@ export function TimelinePage({ mode }: TimelinePageProps) {
               onCreateTask={createTaskAt}
               onDeleteTask={(task) => deleteTask(task.id)}
               onPanViewRange={panRange}
+              structureReadOnly={!canManageTimeline}
+              isOwnTask={taskBelongsToCurrentUser}
             />
           </TimelineDisplaySection>
 
@@ -545,7 +617,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
               <select
                 value={selectedPlanTemplate?.id ?? ''}
                 onChange={(event) => setSelectedPlanTemplateId(event.target.value)}
-                disabled={store.dayPlanTemplates.length === 0}
+                disabled={store.dayPlanTemplates.length === 0 || !canManageTimeline}
                 aria-label="选择整日计划模板"
               >
                 {store.dayPlanTemplates.length > 0 ? (
@@ -558,7 +630,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
                   <option value="">暂无模板</option>
                 )}
               </select>
-              <button className="primary-button" type="button" disabled={!selectedPlanTemplate} onClick={() => selectedPlanTemplate && applyDayPlanTemplateToTomorrow(selectedPlanTemplate)}>
+              <button className="primary-button" type="button" disabled={!selectedPlanTemplate || !canManageTimeline} onClick={() => selectedPlanTemplate && applyDayPlanTemplateToTomorrow(selectedPlanTemplate)}>
                 复用并覆盖当前次日计划
               </button>
             </div>
@@ -573,10 +645,11 @@ export function TimelinePage({ mode }: TimelinePageProps) {
               onEditEvent={(event) => setEditingEventRef({ id: event.id, scope: 'plan' })}
               onCreateEvent={(time) => requestTemplateAt(time, 'plan')}
               onPanViewRange={panRange}
+              structureReadOnly={!canManageTimeline}
             />
           </TimelineDisplaySection>
 
-          <ComparisonTable rows={comparisonRows} onNoteChange={updateComparisonNote} />
+          <ComparisonTable rows={comparisonRows} onNoteChange={updateComparisonNote} canEdit={canManageTimeline} />
 
           <IssueList tasks={day.tasks} onOpenTask={(task) => setEditingTaskId(task.id)} />
         </>
@@ -586,13 +659,17 @@ export function TimelinePage({ mode }: TimelinePageProps) {
           templates={store.workTemplates}
           dayPlanTemplates={store.dayPlanTemplates}
           peopleOptionsByRole={peopleOptionsByRole}
+          canEditMembers={canEditMembers}
+          canEditEventTemplates={canEditEventTemplates}
+          canEditDayTemplates={canEditDayTemplates}
           onPeopleChange={updatePeople}
           onTemplatesChange={updateWorkTemplates}
           onDayPlanTemplatesChange={updateDayPlanTemplates}
+          onPermissionDenied={setPermissionMessage}
         />
       )}
 
-      {editingEvent ? (
+      {editingEvent && canManageTimeline ? (
         <EventEditor
           event={editingEvent}
           scope={editingEventRef?.scope ?? 'actual'}
@@ -615,12 +692,13 @@ export function TimelinePage({ mode }: TimelinePageProps) {
           task={editingTask}
           events={day.events}
           peopleOptionsByRole={peopleOptionsByRole}
+          access={editingTaskAccess ?? getTaskEditAccess(editingTask, currentUser, store.people)}
           onSave={upsertTask}
           onDelete={deleteTask}
           onClose={() => setEditingTaskId(null)}
         />
       ) : null}
-      {editingPlan ? (
+      {editingPlan && canManageTimeline ? (
         <PlanEditor
           plan={editingPlan}
           events={day.tomorrowEvents}
@@ -630,7 +708,7 @@ export function TimelinePage({ mode }: TimelinePageProps) {
           onClose={() => setEditingPlanId(null)}
         />
       ) : null}
-      {templateApplyRequest ? (
+      {templateApplyRequest && canManageTimeline ? (
         <TemplateApplyModal
           title={templateApplyRequest.scope === 'actual' ? '从模板新增今日大事件' : '从模板新增次日计划大事件'}
           templates={store.workTemplates}

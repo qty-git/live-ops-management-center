@@ -1,6 +1,7 @@
 import { Plus, Trash2 } from 'lucide-react'
 import { Modal } from '../../../shared/components/Modal'
 import type { TaskIssue, TimelineTask, WorkEvent } from '../types'
+import type { TaskEditAccess } from '../taskAccess'
 import { TASK_STATUSES, TEAM_ROLES, type TeamRole } from '../types'
 import { createId, ensureEndAfterStart, eventLabel } from '../utils'
 import { TimeInput } from './TimeInput'
@@ -9,6 +10,7 @@ interface TaskEditorProps {
   task: TimelineTask
   events: WorkEvent[]
   peopleOptionsByRole: Record<TeamRole, string[]>
+  access: TaskEditAccess
   onSave: (task: TimelineTask) => void
   onDelete: (taskId: string) => void
   onClose: () => void
@@ -20,7 +22,7 @@ const statusMeta = {
   红: '未完成 / 有问题',
 } as const
 
-export function TaskEditor({ task, events, peopleOptionsByRole, onSave, onDelete, onClose }: TaskEditorProps) {
+export function TaskEditor({ task, events, peopleOptionsByRole, access, onSave, onDelete, onClose }: TaskEditorProps) {
   const update = <K extends keyof TimelineTask>(key: K, value: TimelineTask[K]) => {
     const next = { ...task, [key]: value }
     if (key === 'startTime') {
@@ -91,13 +93,15 @@ export function TaskEditor({ task, events, peopleOptionsByRole, onSave, onDelete
 
   return (
     <Modal
-      title="编辑岗位任务"
+      title={access.canEditFeedback || access.canEditStructure ? '编辑岗位任务' : '查看岗位任务'}
       onClose={onClose}
       footer={
         <>
-          <button className="danger-button compact-danger-button" type="button" onClick={confirmDelete}>
-            <Trash2 size={14} /> 删除
-          </button>
+          {access.canDelete ? (
+            <button className="danger-button compact-danger-button" type="button" onClick={confirmDelete}>
+              <Trash2 size={14} /> 删除
+            </button>
+          ) : null}
           <button className="primary-button" type="button" onClick={onClose}>
             完成
           </button>
@@ -105,13 +109,18 @@ export function TaskEditor({ task, events, peopleOptionsByRole, onSave, onDelete
       }
     >
       <div className="form-grid">
+        {!access.canEditStructure ? (
+          <div className="task-permission-note field-wide" role="note">
+            {access.canEditFeedback ? '你没有权限编辑该任务的时间、分配或工作内容，只能修改完成状态、问题反馈和备注。' : '你没有权限编辑该任务，可以查看完整任务详情。'}
+          </div>
+        ) : null}
         <label className="field-wide">
           工作内容
-          <input value={task.content} onChange={(e) => update('content', e.target.value)} />
+          <input value={task.content} onChange={(e) => update('content', e.target.value)} readOnly={!access.canEditStructure} />
         </label>
         <label>
           岗位
-          <select value={task.role} onChange={(e) => updateRole(e.target.value as TeamRole)}>
+          <select value={task.role} onChange={(e) => updateRole(e.target.value as TeamRole)} disabled={!access.canEditStructure}>
             {TEAM_ROLES.map((role) => (
               <option value={role} key={role}>
                 {role}
@@ -121,7 +130,7 @@ export function TaskEditor({ task, events, peopleOptionsByRole, onSave, onDelete
         </label>
         <label>
           人员姓名
-          <input list={personListId} value={task.personName} onChange={(e) => update('personName', e.target.value)} placeholder="填写姓名" />
+          <input list={personListId} value={task.personName} onChange={(e) => update('personName', e.target.value)} placeholder="填写姓名" readOnly={!access.canEditStructure} />
           <datalist id={personListId}>
             {personOptions.map((person) => (
               <option value={person} key={person} />
@@ -130,17 +139,17 @@ export function TaskEditor({ task, events, peopleOptionsByRole, onSave, onDelete
         </label>
         <label>
           开始时间
-          <TimeInput value={task.startTime} onChange={(value) => update('startTime', value)} ariaLabel="任务开始时间" />
+          <TimeInput value={task.startTime} onChange={(value) => update('startTime', value)} ariaLabel="任务开始时间" readOnly={!access.canEditStructure} />
           <span className="field-tip">输入 0845 可自动转为 08:45</span>
         </label>
         <label>
           结束时间
-          <TimeInput value={task.endTime} onChange={(value) => update('endTime', value)} ariaLabel="任务结束时间" />
+          <TimeInput value={task.endTime} onChange={(value) => update('endTime', value)} ariaLabel="任务结束时间" readOnly={!access.canEditStructure} />
           <span className="field-tip">选择关联事件会先自动匹配，可再手动改</span>
         </label>
         <label>
           关联工作事件
-          <select value={task.workEventId} onChange={(e) => updateWorkEvent(e.target.value)}>
+          <select value={task.workEventId} onChange={(e) => updateWorkEvent(e.target.value)} disabled={!access.canEditStructure}>
             <option value="">未关联</option>
             {events.map((event) => (
               <option value={event.id} key={event.id}>
@@ -157,6 +166,7 @@ export function TaskEditor({ task, events, peopleOptionsByRole, onSave, onDelete
                 className={`status-choice status-choice-${status} ${task.status === status ? 'status-choice-active' : ''}`}
                 type="button"
                 onClick={() => update('status', status)}
+                disabled={!access.canEditFeedback}
                 key={status}
               >
                 <span>{status}</span>
@@ -168,7 +178,7 @@ export function TaskEditor({ task, events, peopleOptionsByRole, onSave, onDelete
         <div className="task-issues field-wide">
           <div className="task-issues-header">
             <strong>问题与解决方案</strong>
-            <button className="secondary-button compact-secondary-button" type="button" onClick={addIssue}>
+            <button className="secondary-button compact-secondary-button" type="button" onClick={addIssue} disabled={!access.canEditFeedback}>
               <Plus size={14} /> 新增问题
             </button>
           </div>
@@ -177,24 +187,24 @@ export function TaskEditor({ task, events, peopleOptionsByRole, onSave, onDelete
             <div className="task-issue-card" key={issue.id}>
               <div className="task-issue-card-header">
                 <span>问题 {index + 1}</span>
-                <button className="icon-button danger-icon" type="button" onClick={() => deleteIssue(issue.id)} aria-label={`删除问题 ${index + 1}`}>
+                <button className="icon-button danger-icon" type="button" onClick={() => deleteIssue(issue.id)} aria-label={`删除问题 ${index + 1}`} disabled={!access.canEditFeedback}>
                   <Trash2 size={14} />
                 </button>
               </div>
               <label>
                 遇到的问题
-                <textarea value={issue.problem} onChange={(event) => updateIssue(issue.id, { problem: event.target.value })} />
+                <textarea value={issue.problem} onChange={(event) => updateIssue(issue.id, { problem: event.target.value })} readOnly={!access.canEditFeedback} />
               </label>
               <label>
                 解决方案
-                <textarea value={issue.solution} onChange={(event) => updateIssue(issue.id, { solution: event.target.value })} />
+                <textarea value={issue.solution} onChange={(event) => updateIssue(issue.id, { solution: event.target.value })} readOnly={!access.canEditFeedback} />
               </label>
             </div>
           ))}
         </div>
         <label className="field-wide">
           备注
-          <textarea value={task.note} onChange={(e) => update('note', e.target.value)} />
+          <textarea value={task.note} onChange={(e) => update('note', e.target.value)} readOnly={!access.canEditFeedback} />
         </label>
       </div>
     </Modal>

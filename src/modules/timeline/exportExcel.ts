@@ -1,4 +1,6 @@
 import writeXlsxFile, { type SheetData } from 'write-excel-file/browser'
+import { assertPermission } from '../auth/accessControl'
+import type { AuthUser } from '../auth/types'
 import type { ComparisonRow, TaskIssue, TimelineDayData, TimelineTask, TomorrowPlan, WorkEvent } from './types'
 import { addDays, calculateTaskMinutes, collectTaskIssues, eventLabel, formatDuration, getWorkEventById, taskIssueSummary } from './utils'
 
@@ -22,11 +24,13 @@ const headerStyle = {
 }
 
 export async function exportTimelineExcel(params: {
+  user: AuthUser
   date: string
   day: TimelineDayData
   comparisonRows: ComparisonRow[]
   plansForTomorrow: TomorrowPlan[]
 }) {
+  assertPermission(params.user, 'exports:use')
   const { date, day, comparisonRows, plansForTomorrow } = params
   const issues = day.tasks.flatMap((task) => collectTaskIssues(task).map((issue) => ({ task, issue })))
   const sheets = [

@@ -28,6 +28,8 @@ interface TimelineBoardProps {
   precisionOverride?: TimelinePrecision
   date?: string
   readOnly?: boolean
+  structureReadOnly?: boolean
+  isOwnTask?: (task: TimelineTask) => boolean
 }
 
 interface CurrentTimeMarker {
@@ -52,6 +54,8 @@ export function TimelineBoard({
   precisionOverride,
   date,
   readOnly = false,
+  structureReadOnly = readOnly,
+  isOwnTask = () => false,
 }: TimelineBoardProps) {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set())
   const [isPanning, setIsPanning] = useState(false)
@@ -252,18 +256,18 @@ export function TimelineBoard({
           stableLaneMap={eventLaneMap}
           stableLaneCount={3}
           currentTimeMarker={currentTimeMarker}
-          readOnly={readOnly}
-          emptyLabel={readOnly ? '暂无模板阶段' : '双击新增工作事件'}
+          readOnly={readOnly || structureReadOnly}
+          emptyLabel={readOnly || structureReadOnly ? '暂无工作事件' : '双击新增工作事件'}
           onDoubleClick={(time) => onCreateEvent(time)}
           renderItem={(event) => (
             <button
               className={`timeline-block event-block phase-${event.phase} ${readOnly ? 'timeline-block-readonly' : ''}`}
               type="button"
               onClick={() => {
-                if (!readOnly) onEditEvent(event.sourceEvent)
+                if (!readOnly && !structureReadOnly) onEditEvent(event.sourceEvent)
               }}
               onContextMenu={(contextEvent) => {
-                if (readOnly || !onDeleteEvent) return
+                if (readOnly || structureReadOnly || !onDeleteEvent) return
                 contextEvent.preventDefault()
                 confirmDeleteEvent(event.sourceEvent)
               }}
@@ -296,6 +300,8 @@ export function TimelineBoard({
                 onDeleteTask={onDeleteTask}
                 currentTimeMarker={currentTimeMarker}
                 readOnly={readOnly}
+                structureReadOnly={structureReadOnly}
+                isOwnTask={isOwnTask}
               />
             ))
           : null}
@@ -408,6 +414,8 @@ function TimelineRoleLane({
   onDeleteTask,
   currentTimeMarker,
   readOnly,
+  structureReadOnly,
+  isOwnTask,
 }: {
   role: TeamRole
   tasks: TimelineTask[]
@@ -421,6 +429,8 @@ function TimelineRoleLane({
   onDeleteTask?: (task: TimelineTask) => void
   currentTimeMarker?: CurrentTimeMarker | null
   readOnly?: boolean
+  structureReadOnly?: boolean
+  isOwnTask: (task: TimelineTask) => boolean
 }) {
   const confirmDeleteTask = (task: TimelineTask) => {
     if (window.confirm(`确认删除“${task.content}”？`)) {
@@ -436,24 +446,25 @@ function TimelineRoleLane({
         precision={precision}
         viewStartTime={viewStartTime}
         viewEndTime={viewEndTime}
-        emptyLabel={readOnly ? `${role}暂无分配` : `双击新增${role}任务`}
+        emptyLabel={readOnly || structureReadOnly ? `${role}暂无分配` : `双击新增${role}任务`}
         blockHeight={expanded ? TASK_BLOCK_HEIGHT + 76 : TASK_BLOCK_HEIGHT}
         onDoubleClick={(time) => onCreateTask(role, time)}
         currentTimeMarker={currentTimeMarker}
-        readOnly={readOnly}
+        readOnly={readOnly || structureReadOnly}
         renderItem={(task) => (
           <button
-            className={`timeline-block task-block status-${task.status} ${readOnly ? 'timeline-block-readonly' : ''}`}
+            className={`timeline-block task-block status-${task.status} ${isOwnTask(task) ? 'task-block-mine' : ''} ${readOnly ? 'timeline-block-readonly' : ''}`}
             type="button"
             onClick={() => {
               if (!readOnly) onEditTask(task)
             }}
             onContextMenu={(event) => {
-              if (readOnly) return
+              if (readOnly || structureReadOnly) return
               event.preventDefault()
               if (onDeleteTask) confirmDeleteTask(task)
             }}
           >
+            {isOwnTask(task) ? <span className="my-task-badge">我的任务</span> : null}
             <span className="block-title">{task.content}</span>
             <span className="block-subtitle">
               {task.startTime}-{task.endTime}

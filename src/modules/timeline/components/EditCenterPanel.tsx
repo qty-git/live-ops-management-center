@@ -23,9 +23,13 @@ interface EditCenterPanelProps {
   templates: WorkTemplate[]
   dayPlanTemplates: DayPlanTemplate[]
   peopleOptionsByRole: Record<TeamRole, string[]>
+  canEditMembers: boolean
+  canEditEventTemplates: boolean
+  canEditDayTemplates: boolean
   onPeopleChange: (people: TeamPerson[]) => void
   onTemplatesChange: (templates: WorkTemplate[]) => void
   onDayPlanTemplatesChange: (templates: DayPlanTemplate[]) => void
+  onPermissionDenied: (message: string) => void
 }
 
 const getDefaultOwner = (role: TeamRole) => `${role} A`
@@ -39,9 +43,13 @@ export function EditCenterPanel({
   templates,
   dayPlanTemplates,
   peopleOptionsByRole,
+  canEditMembers,
+  canEditEventTemplates,
+  canEditDayTemplates,
   onPeopleChange,
   onTemplatesChange,
   onDayPlanTemplatesChange,
+  onPermissionDenied,
 }: EditCenterPanelProps) {
   const [activeEditPage, setActiveEditPage] = useState<'people' | 'eventTemplates' | 'dayPlanTemplates'>('people')
   const [personDrafts, setPersonDrafts] = useState<Record<TeamRole, string>>({
@@ -104,7 +112,14 @@ export function EditCenterPanel({
     [peopleOptionsByRole],
   )
 
+  const requireEdit = (allowed: boolean) => {
+    if (allowed) return true
+    onPermissionDenied('你没有权限执行此操作')
+    return false
+  }
+
   useEffect(() => {
+    if (!canEditEventTemplates) return
     let hasChanged = false
     const nextTemplates = templates.map((template) => {
       let templateChanged = false
@@ -128,9 +143,10 @@ export function EditCenterPanel({
     if (hasChanged) {
       onTemplatesChange(nextTemplates)
     }
-  }, [getPreferredOwner, templates, onTemplatesChange])
+  }, [canEditEventTemplates, getPreferredOwner, templates, onTemplatesChange])
 
   useEffect(() => {
+    if (!canEditEventTemplates) return
     let hasChanged = false
     const nextTemplates = templates.map((template) => {
       const shouldSeedDefaults = !seededDefaultAssignmentTemplateIds.current.has(template.id)
@@ -164,7 +180,7 @@ export function EditCenterPanel({
     if (hasChanged) {
       onTemplatesChange(nextTemplates)
     }
-  }, [getPreferredOwner, templates, onTemplatesChange])
+  }, [canEditEventTemplates, getPreferredOwner, templates, onTemplatesChange])
 
   useEffect(() => {
     if (!eventTemplateDrawerOpen) return
@@ -181,6 +197,7 @@ export function EditCenterPanel({
   }, [eventTemplateDrawerOpen])
 
   const updateTemplate = (template: WorkTemplate) => {
+    if (!requireEdit(canEditEventTemplates)) return
     onTemplatesChange(templates.map((item) => (item.id === template.id ? template : item)))
   }
 
@@ -207,6 +224,7 @@ export function EditCenterPanel({
   }
 
   const addTemplate = () => {
+    if (!requireEdit(canEditEventTemplates)) return
     const template = createBlankTemplate(getPreferredOwner)
     onTemplatesChange([...templates, template])
     setSelectedTemplateId(template.id)
@@ -214,6 +232,7 @@ export function EditCenterPanel({
   }
 
   const deleteTemplate = (templateId: string) => {
+    if (!requireEdit(canEditEventTemplates)) return
     if (templates.length <= 1) return
     if (!window.confirm('确认删除这个次日计划模板？')) return
     const nextTemplates = templates.filter((template) => template.id !== templateId)
@@ -230,16 +249,19 @@ export function EditCenterPanel({
   }
 
   const updateDayPlanTemplate = (template: DayPlanTemplate) => {
+    if (!requireEdit(canEditDayTemplates)) return
     onDayPlanTemplatesChange(dayPlanTemplates.map((item) => (item.id === template.id ? template : item)))
   }
 
   const addDayPlanTemplate = () => {
+    if (!requireEdit(canEditDayTemplates)) return
     const template = createBlankDayPlanTemplate()
     onDayPlanTemplatesChange([...dayPlanTemplates, template])
     setSelectedDayPlanTemplateId(template.id)
   }
 
   const deleteDayPlanTemplate = (templateId: string) => {
+    if (!requireEdit(canEditDayTemplates)) return
     if (!window.confirm('确认删除这个整日计划模板？')) return
     const nextTemplates = dayPlanTemplates.filter((template) => template.id !== templateId)
     onDayPlanTemplatesChange(nextTemplates)
@@ -247,6 +269,7 @@ export function EditCenterPanel({
   }
 
   const insertSavedEvent = (sourceTemplate: WorkTemplate, startTime: string) => {
+    if (!requireEdit(canEditDayTemplates)) return
     const enabledSourceStages = sourceTemplate.stages.filter((stage) => stage.enabled)
     if (enabledSourceStages.length === 0) return
 
@@ -408,6 +431,7 @@ export function EditCenterPanel({
   }
 
   const addPerson = (role: TeamRole) => {
+    if (!requireEdit(canEditMembers)) return
     const name = personDrafts[role].trim()
     if (!name) return
     if (people.some((person) => person.role === role && person.name === name)) return
@@ -417,6 +441,7 @@ export function EditCenterPanel({
   }
 
   const deletePerson = (personId: string) => {
+    if (!requireEdit(canEditMembers)) return
     onPeopleChange(people.filter((person) => person.id !== personId))
   }
 
@@ -475,9 +500,11 @@ export function EditCenterPanel({
                                 <UserRound size={12} />
                               </span>
                               <strong>{person.name}</strong>
-                              <button className="person-pill-delete" type="button" aria-label={`删除${person.name}`} onClick={() => deletePerson(person.id)}>
-                                <Trash2 size={12} />
-                              </button>
+                              {canEditMembers ? (
+                                <button className="person-pill-delete" type="button" aria-label={`删除${person.name}`} onClick={() => deletePerson(person.id)}>
+                                  <Trash2 size={12} />
+                                </button>
+                              ) : null}
                             </span>
                           ))
                         ) : (
@@ -489,9 +516,10 @@ export function EditCenterPanel({
                         <input
                           value={personDrafts[role]}
                           placeholder="填写姓名"
+                          disabled={!canEditMembers}
                           onChange={(event) => setPersonDrafts((current) => ({ ...current, [role]: event.target.value }))}
                         />
-                        <button className="secondary-button" type="button" onClick={() => addPerson(role)}>
+                        <button className="secondary-button" type="button" onClick={() => addPerson(role)} disabled={!canEditMembers}>
                           <Plus size={14} /> 添加
                         </button>
                       </div>
@@ -514,7 +542,7 @@ export function EditCenterPanel({
                 <button className="secondary-button" type="button" onClick={openTemplateDrawer}>
                   打开模板库
                 </button>
-                <button className="secondary-button" type="button" onClick={addTemplate}>
+                <button className="secondary-button" type="button" onClick={addTemplate} disabled={!canEditEventTemplates}>
                   <Plus size={14} /> 新增大事件
                 </button>
               </div>
@@ -540,35 +568,35 @@ export function EditCenterPanel({
                   </label>
                   <label>
                     大事件名称
-                    <input value={selectedTemplate.name} onChange={(event) => updateTemplate({ ...selectedTemplate, name: event.target.value })} />
+                    <input value={selectedTemplate.name} disabled={!canEditEventTemplates} onChange={(event) => updateTemplate({ ...selectedTemplate, name: event.target.value })} />
                   </label>
                   <label className="field-wide">
                     大事件备注
-                    <textarea value={selectedTemplate.note} onChange={(event) => updateTemplate({ ...selectedTemplate, note: event.target.value })} />
+                    <textarea value={selectedTemplate.note} disabled={!canEditEventTemplates} onChange={(event) => updateTemplate({ ...selectedTemplate, note: event.target.value })} />
                   </label>
 
                   <div className="template-stage-grid field-wide">
                     {selectedTemplate.stages.map((stage) => (
                       <div className="template-stage-card" key={stage.id}>
                         <label className="checkbox-row">
-                          <input type="checkbox" checked={stage.enabled} onChange={(event) => updateStage({ ...stage, enabled: event.target.checked })} />
+                          <input type="checkbox" checked={stage.enabled} disabled={!canEditEventTemplates} onChange={(event) => updateStage({ ...stage, enabled: event.target.checked })} />
                           包含{stage.phase}
                         </label>
                         <div className="stage-time-row">
                           <label>
                             事件名称
-                            <input value={stage.eventName ?? selectedTemplate.name} onChange={(event) => updateStage({ ...stage, eventName: event.target.value })} />
+                            <input value={stage.eventName ?? selectedTemplate.name} disabled={!canEditEventTemplates} onChange={(event) => updateStage({ ...stage, eventName: event.target.value })} />
                           </label>
                           <label>
                             开始
-                            <TimeInput value={stage.startTime} onChange={(value) => updateStage({ ...stage, startTime: value, endTime: ensureEndAfterStart(value, stage.endTime) })} />
+                            <TimeInput value={stage.startTime} readOnly={!canEditEventTemplates} onChange={(value) => updateStage({ ...stage, startTime: value, endTime: ensureEndAfterStart(value, stage.endTime) })} />
                           </label>
                           <label>
                             结束
-                            <TimeInput value={stage.endTime} onChange={(value) => updateStage({ ...stage, endTime: ensureEndAfterStart(stage.startTime, value) })} />
+                            <TimeInput value={stage.endTime} readOnly={!canEditEventTemplates} onChange={(value) => updateStage({ ...stage, endTime: ensureEndAfterStart(stage.startTime, value) })} />
                           </label>
                         </div>
-                        <textarea value={stage.note} onChange={(event) => updateStage({ ...stage, note: event.target.value })} placeholder="阶段工作说明" />
+                        <textarea value={stage.note} disabled={!canEditEventTemplates} onChange={(event) => updateStage({ ...stage, note: event.target.value })} placeholder="阶段工作说明" />
                       </div>
                     ))}
                   </div>
@@ -576,7 +604,7 @@ export function EditCenterPanel({
                   <div className="assignment-editor field-wide">
                     <div className="editor-card-title">
                       <h3>人员分配</h3>
-                      <button className="secondary-button" type="button" onClick={addAssignment} disabled={!activeStageId}>
+                      <button className="secondary-button" type="button" onClick={addAssignment} disabled={!activeStageId || !canEditEventTemplates}>
                         <Plus size={14} /> 添加分配
                       </button>
                     </div>
@@ -598,6 +626,7 @@ export function EditCenterPanel({
                       <div className="assignment-row template-assignment-row" key={assignment.id}>
                         <select
                           value={assignment.role}
+                          disabled={!canEditEventTemplates}
                           onChange={(event) => {
                             const role = event.target.value as TeamRole
                             updateAssignment({ ...assignment, role, owner: getPreferredOwner(role) })
@@ -609,13 +638,14 @@ export function EditCenterPanel({
                             </option>
                           ))}
                         </select>
-                        <input value={assignment.owner} onChange={(event) => updateAssignment({ ...assignment, owner: event.target.value })} placeholder="负责人" />
+                        <input value={assignment.owner} disabled={!canEditEventTemplates} onChange={(event) => updateAssignment({ ...assignment, owner: event.target.value })} placeholder="负责人" />
                         <input
                           value={cleanAssignmentContent(assignment.content)}
+                          disabled={!canEditEventTemplates}
                           onChange={(event) => updateAssignment({ ...assignment, content: event.target.value })}
                           placeholder={LEGACY_ASSIGNMENT_PLACEHOLDER}
                         />
-                        <button className="icon-button danger-icon" type="button" aria-label="删除分配" onClick={() => deleteAssignment(assignment.id)}>
+                        <button className="icon-button danger-icon" type="button" aria-label="删除分配" onClick={() => deleteAssignment(assignment.id)} disabled={!canEditEventTemplates}>
                           <Trash2 size={15} />
                         </button>
                       </div>
@@ -623,7 +653,7 @@ export function EditCenterPanel({
                   </div>
 
                   <div className="template-actions field-wide">
-                    <button className="danger-button compact-danger-button" type="button" onClick={() => deleteTemplate(selectedTemplate.id)}>
+                    <button className="danger-button compact-danger-button" type="button" onClick={() => deleteTemplate(selectedTemplate.id)} disabled={!canEditEventTemplates}>
                       <Trash2 size={14} /> 删除模板
                     </button>
                   </div>
@@ -641,7 +671,7 @@ export function EditCenterPanel({
               <h2>整日计划模板时间轴</h2>
               <p>固定显示 08:00 - 20:00 小时级全览；双击工作事件行可插入已保存的大事件计划。</p>
             </div>
-            <button className="secondary-button" type="button" onClick={addDayPlanTemplate}>
+            <button className="secondary-button" type="button" onClick={addDayPlanTemplate} disabled={!canEditDayTemplates}>
               <Plus size={14} /> 新增整日模板
             </button>
           </div>
@@ -672,7 +702,7 @@ export function EditCenterPanel({
                 模板名称
                 <input
                   value={selectedDayPlanTemplate?.name ?? ''}
-                  disabled={!selectedDayPlanTemplate}
+                  disabled={!selectedDayPlanTemplate || !canEditDayTemplates}
                   onChange={(event) => selectedDayPlanTemplate && updateDayPlanTemplate({ ...selectedDayPlanTemplate, name: event.target.value })}
                   placeholder="例如：直播日 / 复盘日 / 选款日"
                 />
@@ -681,7 +711,7 @@ export function EditCenterPanel({
                 模板备注
                 <input
                   value={selectedDayPlanTemplate?.note ?? ''}
-                  disabled={!selectedDayPlanTemplate}
+                  disabled={!selectedDayPlanTemplate || !canEditDayTemplates}
                   onChange={(event) => selectedDayPlanTemplate && updateDayPlanTemplate({ ...selectedDayPlanTemplate, note: event.target.value })}
                   placeholder="记录这个整日计划适用场景"
                 />
@@ -689,7 +719,7 @@ export function EditCenterPanel({
               <button
                 className="danger-button compact-danger-button"
                 type="button"
-                disabled={!selectedDayPlanTemplate}
+                disabled={!selectedDayPlanTemplate || !canEditDayTemplates}
                 onClick={() => selectedDayPlanTemplate && deleteDayPlanTemplate(selectedDayPlanTemplate.id)}
               >
                 <Trash2 size={14} /> 删除整日模板
@@ -710,24 +740,25 @@ export function EditCenterPanel({
             onEditTask={(task) => setSelectedDayPlanEventId(task.workEventId)}
             onDeleteTask={(task) => deleteDayPlanPlan(task.sourcePlanId)}
             onCreateTask={addDayPlanPlanAt}
+            structureReadOnly={!canEditDayTemplates}
           />
 
           {selectedDayPlanTemplate && activeDayPlanEvent ? (
             <div className="day-plan-event-editor">
               <div className="editor-card-title">
                 <h3>整日模板中的大事件阶段</h3>
-                <button className="secondary-button" type="button" onClick={addDayPlanPlanForActiveEvent}>
+                <button className="secondary-button" type="button" onClick={addDayPlanPlanForActiveEvent} disabled={!canEditDayTemplates}>
                   <Plus size={14} /> 添加人员任务
                 </button>
               </div>
               <div className="day-plan-event-fields">
                 <label>
                   事件名称
-                  <input value={activeDayPlanEvent.name} onChange={(event) => updateDayPlanEvent({ ...activeDayPlanEvent, name: event.target.value })} />
+                  <input value={activeDayPlanEvent.name} disabled={!canEditDayTemplates} onChange={(event) => updateDayPlanEvent({ ...activeDayPlanEvent, name: event.target.value })} />
                 </label>
                 <label>
                   阶段
-                  <select value={activeDayPlanEvent.phase} onChange={(event) => updateDayPlanEvent({ ...activeDayPlanEvent, phase: event.target.value as WorkTemplateStage['phase'] })}>
+                  <select value={activeDayPlanEvent.phase} disabled={!canEditDayTemplates} onChange={(event) => updateDayPlanEvent({ ...activeDayPlanEvent, phase: event.target.value as WorkTemplateStage['phase'] })}>
                     {EVENT_PHASES.map((phase) => (
                       <option value={phase} key={phase}>
                         {phase}
@@ -739,6 +770,7 @@ export function EditCenterPanel({
                   开始
                   <TimeInput
                     value={activeDayPlanEvent.startTime}
+                    readOnly={!canEditDayTemplates}
                     onChange={(value) =>
                       updateDayPlanEvent({
                         ...activeDayPlanEvent,
@@ -752,6 +784,7 @@ export function EditCenterPanel({
                   结束
                   <TimeInput
                     value={activeDayPlanEvent.endTime}
+                    readOnly={!canEditDayTemplates}
                     onChange={(value) =>
                       updateDayPlanEvent({
                         ...activeDayPlanEvent,
@@ -762,7 +795,7 @@ export function EditCenterPanel({
                 </label>
                 <label className="field-wide">
                   阶段说明
-                  <textarea value={activeDayPlanEvent.note} onChange={(event) => updateDayPlanEvent({ ...activeDayPlanEvent, note: event.target.value })} />
+                  <textarea value={activeDayPlanEvent.note} disabled={!canEditDayTemplates} onChange={(event) => updateDayPlanEvent({ ...activeDayPlanEvent, note: event.target.value })} />
                 </label>
               </div>
 
@@ -771,6 +804,7 @@ export function EditCenterPanel({
                   <div className="assignment-row template-assignment-row" key={plan.id}>
                     <select
                       value={plan.role}
+                      disabled={!canEditDayTemplates}
                       onChange={(event) => {
                         const role = event.target.value as TeamRole
                         updateDayPlanPlan({ ...plan, role, owner: getPreferredOwner(role) })
@@ -782,13 +816,14 @@ export function EditCenterPanel({
                         </option>
                       ))}
                     </select>
-                    <input value={plan.owner} onChange={(event) => updateDayPlanPlan({ ...plan, owner: event.target.value })} placeholder="负责人" />
+                    <input value={plan.owner} disabled={!canEditDayTemplates} onChange={(event) => updateDayPlanPlan({ ...plan, owner: event.target.value })} placeholder="负责人" />
                     <input
                       value={cleanAssignmentContent(plan.content)}
+                      disabled={!canEditDayTemplates}
                       onChange={(event) => updateDayPlanPlan({ ...plan, content: event.target.value })}
                       placeholder={LEGACY_ASSIGNMENT_PLACEHOLDER}
                     />
-                    <button className="icon-button danger-icon" type="button" aria-label="删除人员任务" onClick={() => deleteDayPlanPlan(plan.id)}>
+                    <button className="icon-button danger-icon" type="button" aria-label="删除人员任务" onClick={() => deleteDayPlanPlan(plan.id)} disabled={!canEditDayTemplates}>
                       <Trash2 size={15} />
                     </button>
                   </div>
@@ -818,7 +853,7 @@ export function EditCenterPanel({
                 <Search size={15} />
                 <input value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} placeholder="搜索模板" />
               </label>
-              <button className="primary-button" type="button" onClick={addTemplate}>
+              <button className="primary-button" type="button" onClick={addTemplate} disabled={!canEditEventTemplates}>
                 <Plus size={14} /> 新增大事件
               </button>
             </div>
