@@ -1,8 +1,8 @@
 # 直播运营管理中台项目交接
 
-最后更新：2026-06-20
-当前分支：`codex/style-split`
-阶段状态：阶段 1–8 稳定版本与 CSS 搬家式拆分均已提交并推送
+最后更新：2026-06-21
+当前分支：`codex/account-table-ux`
+阶段状态：阶段 1–8、CSS 搬家式拆分与账号表格体验优化均已完成验证和提交
 
 ## 1. 项目目标
 
@@ -13,8 +13,9 @@
 - 技术栈：React 19、TypeScript、Vite 8、CloudBase JS SDK。
 - 稳定线上分支：`main`，本轮未修改、未合并、未部署。
 - 阶段 1–8 稳定分支：`codex/ui-date-issue-edits`，提交 `db04b72` 已推送远端。
-- 当前开发分支：`codex/style-split`，从 `db04b72` 创建。
+- 当前开发分支：`codex/account-table-ux`，从 CSS 拆分文档提交 `bd0887f` 创建。
 - CSS 拆分提交：`26d6397 refactor: split stylesheet into ordered modules`，已推送 `origin/codex/style-split`，未部署。
+- 账号表格体验提交：`75c6244 feat: improve account table actions`；只调整账号页标记和样式，未改账号、权限或 CloudBase 逻辑。
 - 时间轴业务数据继续使用 `live-ops-management.timeline.v1`，CloudBase 仍同步 `timeline_stores/main`。
 - users 仍使用独立键 `live-ops-management.users.v1`，内部结构升级为 v3；session 使用原独立键，内部结构升级为 v4。
 - 阶段 4/5 未修改时间轴数据结构、业务存储键、CloudBase 集合、文档 ID、匿名登录或同步时序。
@@ -50,7 +51,8 @@ src/
   shared/components/
     AccessDenied.tsx
     ModulePlaceholder.tsx
-  index.css                         登录、路由、任务高亮和账号页样式
+  index.css                         十个样式模块的顺序导入入口
+  styles/                           基础、布局、时间轴、账号与交互覆盖等样式模块
 ```
 
 ## 4. 已完成功能
@@ -149,31 +151,8 @@ src/
 
 ## 6. 当前未提交改动
 
-阶段 1 至 8 所有改动仍在工作区，包括：
-
-- `src/app/App.tsx`
-- `src/app/routes.tsx`
-- `src/index.css`
-- `src/modules/auth/**`
-- `src/modules/auth/accessControl.ts`
-- `src/modules/auth/components/PerspectiveSwitcher.tsx`
-- `src/modules/timeline/taskAccess.ts`
-- `src/modules/timeline/pages/TimelinePage.tsx`
-- `src/modules/timeline/components/TimelineBoard.tsx`
-- `src/modules/timeline/components/TaskEditor.tsx`
-- `src/modules/timeline/components/PlanTimelineBoard.tsx`
-- `src/modules/timeline/components/TopControls.tsx`
-- `src/modules/timeline/components/ComparisonTable.tsx`
-- `src/modules/timeline/components/EditCenterPanel.tsx`
-- `src/modules/timeline/components/TimeInput.tsx`
-- `src/modules/timeline/exportExcel.ts`
-- `src/shared/components/AccessDenied.tsx`
-- `src/shared/components/ModulePlaceholder.tsx`
-- `src/shared/components/Modal.tsx`
-- `docs/superpowers/specs/2026-06-20-stage-4-5-design.md`
-- `docs/superpowers/plans/2026-06-20-stage-3-access-control.md`
-- `docs/superpowers/plans/2026-06-20-stage-4-5-timeline-users.md`
-- `PROJECT_HANDOFF.md`
+- 账号表格功能与对应设计、计划文档已提交为 `75c6244`。
+- 当前只剩本交接文档状态更新，提交后工作区应恢复干净。
 
 ## 7. 关键逻辑说明
 
@@ -237,16 +216,15 @@ src/
 ## 12. 新对话交接说明
 
 ```markdown
-当前分支：codex/style-split
+当前分支：codex/account-table-ux
 
-阶段 1–8 稳定提交 db04b72 已推送。CSS 已按原顺序拆分为 10 个模块，字节一致性、lint、build、git diff check 和 1280px 视觉冒烟均通过。请先阅读 PROJECT_HANDOFF.md 并检查 git status。
+阶段 1–8 稳定提交 db04b72 与 CSS 拆分已推送。账号表格体验提交 75c6244 已完成 lint、build、git diff check 和 1280px 浏览器验收。请先阅读 PROJECT_HANDOFF.md 并检查 git status。
 
-下一轮只执行：
-- 确认 CSS 拆分提交状态与工作区清洁度
-- 从 CSS 拆分提交创建 `codex/account-table-ux`
-- 只处理账号表格横向滚动、操作分组和状态展示
-- 权限抽屉和整体 UI 高级化继续使用后续独立分支
-- 推送和部署继续等待单独确认
+下一轮建议：
+- 确认 `codex/account-table-ux` 远端状态与工作区清洁度
+- 评审账号表格固定操作列、两行按钮、横向滚动提示和岗位 badge
+- 评审通过后再决定是否创建 `codex/permission-drawer`
+- 部署继续等待单独确认
 
 重要约束：
 - 保留 realUser / viewUser / effectiveUser 区分。
@@ -255,9 +233,9 @@ src/
 - 不清空 users 或时间轴数据。
 - 不修改 CloudBase 同步逻辑，不重写 auth / permissions / users 结构。
 - 不移除函数级权限校验，不删除现有页面。
-- 未经用户明确确认，不要提交、推送或部署。
+- 未经用户明确确认，不要部署。
 
-开始前先检查 git status；未经用户确认不要提交、推送或部署。
+开始前先检查 git status；未经用户确认不要部署。
 ```
 
 ## 13. 阶段 1–8 全量测试收口（2026-06-20）
@@ -352,4 +330,29 @@ src/
 
 ### 14.4 下一步
 
-CSS 拆分提交后，从该提交创建 `codex/account-table-ux`。下一分支只处理账号表格体验，不修改 users 数据结构、权限保存逻辑或 `realUser / viewUser / effectiveUser` 边界。
+已从 CSS 拆分提交创建 `codex/account-table-ux` 并完成账号表格体验优化，详见下一节。
+
+## 15. 账号表格体验优化（2026-06-21）
+
+### 15.1 范围
+
+- 分支：`codex/account-table-ux`；功能提交为 `75c6244`。
+- 保留 1220px 宽表格与局部横向滚动，不压缩或移除账号字段。
+- 操作列固定在右侧，宽度从原操作区 278px 收窄到 184px。
+- 四个操作按钮保持完整文字，按两列两行排列；禁用操作继续使用弱红色。
+- 新增横向滚动提示与更清晰的滚动条；岗位改为中性 badge。
+- 未修改 users 数据、权限判断、保存处理、身份边界或 CloudBase。
+
+### 15.2 验证结果
+
+- `git diff --check`、`npm run lint`、`npm run build`：通过；构建仅有原有主包体积提示。
+- 1280 × 720 下文档宽度 1280px，无页面级横向溢出。
+- 表格容器宽 936px、内容宽 1220px，局部横向滚动正常。
+- 操作区实际为 184px，内部网格为两个 81px 列；按钮呈两列两行且文字不换行。
+- 表格横向滚动到 284px 后，操作列仍保持 `left: 1043px / right: 1227px`，固定效果通过。
+- 编辑资料、编辑权限、重置密码均能打开原有弹窗；未触发会修改测试数据的启停确认。
+- 浏览器控制台无 warning 或 error。
+
+### 15.3 后续建议
+
+先评审本分支的账号表格结果。权限抽屉如继续实施，应从本分支创建独立分支，并保持权限字段与保存逻辑不变。
