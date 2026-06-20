@@ -2,7 +2,7 @@
 
 最后更新：2026-06-21
 当前分支：`codex/system-permission-boundary`
-阶段状态：唯一超级管理员、隐藏系统权限与普通账号删除已完成实现和验证，未部署
+阶段状态：唯一超级管理员、隐藏系统权限与普通账号删除已完成实现、验证并部署正式 CloudBase
 
 ## 1. 项目目标
 
@@ -11,7 +11,7 @@
 ## 2. 当前版本状态
 
 - 技术栈：React 19、TypeScript、Vite 8、CloudBase JS SDK。
-- 稳定线上分支：`main`，本轮未修改、未合并、未部署。
+- `main` 本轮未修改、未合并；CloudBase 正式托管已直接部署当前功能提交 `1e9c070`。
 - 阶段 1–8 稳定分支：`codex/ui-date-issue-edits`，提交 `db04b72` 已推送远端。
 - 当前开发分支：`codex/system-permission-boundary`，从账号表格文档提交 `f726fc3` 创建。
 - CSS 拆分提交：`26d6397 refactor: split stylesheet into ordered modules`，已推送 `origin/codex/style-split`，未部署。
@@ -153,7 +153,7 @@ src/
 ## 6. 当前未提交改动
 
 - 系统权限边界、唯一超级管理员归一化、账号删除 UI 与实施计划已完成实现和验证。
-- 本轮提交后工作区应恢复干净；当前分支尚未部署到 CloudBase 正式环境。
+- 功能提交 `1e9c070` 已部署到 CloudBase 正式环境；本交接记录提交后工作区应恢复干净。
 
 ## 7. 关键逻辑说明
 
@@ -383,7 +383,9 @@ src/
 - 时间轴存储在迁移和删除前后保持字节一致，未修改 CloudBase 或业务数据结构。
 - 1280 × 720 浏览器验收：系统管理分组消失；超级管理员显示 22 项可配置业务权限；角色锁定；普通账号角色仅有 member、manager、admin；删除入口仅在普通账号编辑弹窗出现。
 - 原生删除确认框正常出现；内置浏览器在原生确认框后失去控制，确认后的数据结果由隔离模块断言覆盖。
+- CloudBase 正式部署成功：5 个文件上传成功、0 个失败；无缓存请求返回 HTTP 200，并引用本轮 `index-BpdjJNre.js` 与 `index-5rmYy6id.css`。
+- 正式网址：`https://liveops-prod-d7gcjjnv6edbeedb9-1444875076.tcloudbaseapp.com`。
 
 ### 16.4 后续建议
 
-提交并推送当前分支后先做人工测试。正式 CloudBase 部署继续等待用户单独确认。
+当前分支已推送并部署。下一步建议在正式网址完成人工登录、权限弹窗和普通账号删除验收；如 CDN 尚未刷新，使用无痕窗口或等待数分钟。
