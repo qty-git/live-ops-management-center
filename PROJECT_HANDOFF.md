@@ -2,7 +2,7 @@
 
 最后更新：2026-06-20
 当前分支：`codex/style-split`
-阶段状态：阶段 1–8 稳定版本已提交并推送；CSS 搬家式拆分已完成验证，等待独立提交
+阶段状态：阶段 1–8 稳定版本与 CSS 搬家式拆分均已提交并推送
 
 ## 1. 项目目标
 
@@ -14,7 +14,7 @@
 - 稳定线上分支：`main`，本轮未修改、未合并、未部署。
 - 阶段 1–8 稳定分支：`codex/ui-date-issue-edits`，提交 `db04b72` 已推送远端。
 - 当前开发分支：`codex/style-split`，从 `db04b72` 创建。
-- CSS 拆分改动尚未提交、未推送、未部署。
+- CSS 拆分提交：`26d6397 refactor: split stylesheet into ordered modules`，已推送 `origin/codex/style-split`，未部署。
 - 时间轴业务数据继续使用 `live-ops-management.timeline.v1`，CloudBase 仍同步 `timeline_stores/main`。
 - users 仍使用独立键 `live-ops-management.users.v1`，内部结构升级为 v3；session 使用原独立键，内部结构升级为 v4。
 - 阶段 4/5 未修改时间轴数据结构、业务存储键、CloudBase 集合、文档 ID、匿名登录或同步时序。
@@ -323,7 +323,7 @@ src/
 
 ### 14.1 分支与范围
 
-- 分支：`codex/style-split`，基于稳定提交 `db04b72`。
+- 分支：`codex/style-split`，基于稳定提交 `db04b72`；拆分提交为 `26d6397`。
 - 只移动 CSS，不修改视觉、选择器、声明、class 名、React 组件或业务逻辑。
 - `src/index.css` 从 4,865 行缩减为 10 行顺序导入，`App.tsx` 继续使用原入口路径。
 
