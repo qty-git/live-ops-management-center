@@ -21,7 +21,7 @@ It does not change timeline storage, TeamPerson records, historical tasks, Cloud
 
 The system must contain exactly one super administrator.
 
-- The canonical account is the existing built-in account identified by `system-super-admin`. For legacy stores without that ID, the existing `admin` username is adopted as the canonical account; if neither exists, the default account is created.
+- The canonical account is the existing built-in account identified by `system-super-admin`. For legacy stores without that ID, the existing `admin` username is adopted; if that username was previously changed, the remaining single `super_admin` is retained. The default account is created only when none of those signals exists.
 - The canonical account is forced to role `super_admin` whenever the user store loads.
 - Any additional legacy account with role `super_admin` is downgraded to `admin`. Its username, password, profile, status, and business permissions are preserved.
 - New accounts cannot be created as `super_admin`.

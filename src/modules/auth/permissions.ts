@@ -25,6 +25,19 @@ const BUSINESS_PAGE_PERMISSIONS: readonly Permission[] = [
   'review_report:view',
 ]
 
+export const SYSTEM_MANAGEMENT_PERMISSIONS = [
+  'users:manage',
+  'permissions:manage',
+  'perspective:switch',
+  'data:delete',
+] as const satisfies readonly Permission[]
+
+const systemManagementPermissionSet = new Set<Permission>(SYSTEM_MANAGEMENT_PERMISSIONS)
+
+export function isSystemManagementPermission(permission: Permission): boolean {
+  return systemManagementPermissionSet.has(permission)
+}
+
 export const ROLE_LABELS: Record<UserRole, string> = {
   member: '普通成员',
   manager: '主管',
@@ -75,8 +88,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> =
     'live_data:edit',
     'product_links:edit',
     'users:view',
-    'users:manage',
-    'perspective:switch',
     ...BUSINESS_PAGE_PERMISSIONS,
   ],
   super_admin: PERMISSIONS,
@@ -103,12 +114,17 @@ export function getDefaultRolePermissions(role: UserRole): Permission[] {
 }
 
 export function normalizeUserPermissions(role: UserRole, value: unknown, migratePagePermissions = false): Permission[] {
-  if (!Array.isArray(value)) return getDefaultRolePermissions(role)
+  const stored = Array.isArray(value) ? value.filter(isPermission) : getDefaultRolePermissions(role)
+  const permissions = migratePagePermissions ? [...stored, ...DEFAULT_ROLE_PERMISSIONS[role]] : stored
+  const normalized = new Set(permissions)
 
-  const permissions = value.filter(isPermission)
-  if (!migratePagePermissions) return [...new Set(permissions)]
+  if (role === 'super_admin') {
+    SYSTEM_MANAGEMENT_PERMISSIONS.forEach((permission) => normalized.add(permission))
+  } else {
+    SYSTEM_MANAGEMENT_PERMISSIONS.forEach((permission) => normalized.delete(permission))
+  }
 
-  return [...new Set([...permissions, ...DEFAULT_ROLE_PERMISSIONS[role]])]
+  return PERMISSIONS.filter((permission) => normalized.has(permission))
 }
 
 export function hasPermission(user: { permissions: readonly Permission[] }, permission: Permission): boolean {
@@ -172,13 +188,6 @@ export const PERMISSION_GROUPS: readonly PermissionGroup[] = [
       { label: '导出 Excel', permission: 'exports:use' },
     ],
   },
-  {
-    label: '系统管理',
-    items: [
-      { label: '管理账号', permission: 'users:manage' },
-      { label: '分配权限', permission: 'permissions:manage' },
-      { label: '切换成员视角', permission: 'perspective:switch' },
-      { label: '删除数据', permission: 'data:delete' },
-    ],
-  },
 ]
+
+export const CONFIGURABLE_PERMISSIONS = PERMISSION_GROUPS.flatMap((group) => group.items.map((item) => item.permission))

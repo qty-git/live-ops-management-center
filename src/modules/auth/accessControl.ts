@@ -46,7 +46,7 @@ export function assertPermission(
 }
 
 export function canSwitchPerspective(realUser: AuthUser): boolean {
-  return (realUser.role === 'admin' || realUser.role === 'super_admin') && hasPermission(realUser, 'perspective:switch')
+  return realUser.role === 'super_admin' && hasPermission(realUser, 'perspective:switch')
 }
 
 export function canUseAsViewUser(realUser: AuthUser, target: UserRecord): boolean {

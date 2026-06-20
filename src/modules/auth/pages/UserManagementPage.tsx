@@ -7,6 +7,7 @@ import { hasPermission, ROLE_LABELS } from '../permissions'
 import type { AuthUser, Permission, UserRecord, UserStatus, UserStore } from '../types'
 import {
   createUser,
+  deleteUser,
   loadUserStore,
   resetUserPassword,
   setUserStatus,
@@ -33,8 +34,8 @@ export function UserManagementPage({ currentUser, onUsersChanged }: UserManageme
   const [error, setError] = useState('')
   const people = useMemo(() => loadTimelineStore().people, [])
   const personNames = useMemo(() => new Map(people.map((person) => [person.id, person.name])), [people])
-  const canManageUsers = hasPermission(currentUser, 'users:manage')
-  const canManagePermissions = hasPermission(currentUser, 'permissions:manage')
+  const canManageUsers = currentUser.role === 'super_admin' && hasPermission(currentUser, 'users:manage')
+  const canManagePermissions = currentUser.role === 'super_admin' && hasPermission(currentUser, 'permissions:manage')
   const activeUserCount = store.users.filter((user) => user.status === 'active').length
   const disabledUserCount = store.users.length - activeUserCount
 
@@ -107,6 +108,28 @@ export function UserManagementPage({ currentUser, onUsersChanged }: UserManageme
     } catch (statusError) {
       setNotice('')
       setError(statusError instanceof Error ? statusError.message : `${action}失败`)
+    }
+  }
+
+  const removeUser = (user: UserRecord) => {
+    if (currentUser.role !== 'super_admin') {
+      deny('你没有权限删除账号')
+      return
+    }
+    if (!requirePermission(currentUser, 'users:manage', deny, '你没有权限删除账号')) return
+    if (user.role === 'super_admin') {
+      deny('内置超级管理员账号不可删除')
+      return
+    }
+    if (!window.confirm(`确认删除账号“${user.username}”？删除后该账号无法登录，但不会删除人员、排班或历史任务。`)) return
+
+    try {
+      const nextStore = deleteUser(store, user.id, currentUser)
+      setEditingUser(null)
+      commit(nextStore, '账号已删除')
+    } catch (deleteError) {
+      setNotice('')
+      setError(deleteError instanceof Error ? deleteError.message : '删除账号失败')
     }
   }
 
@@ -217,8 +240,8 @@ export function UserManagementPage({ currentUser, onUsersChanged }: UserManageme
                           </>
                         ) : null}
                         {!targetAllowed ? (
-                          <span className="protected-account" title="普通管理员不能修改超级管理员账号">
-                            <LockKeyhole size={13} /> 超级管理员受保护
+                          <span className="protected-account" title="内置超级管理员账号受系统保护">
+                            <LockKeyhole size={13} /> 内置账号受保护
                           </span>
                         ) : null}
                       </div>
@@ -232,10 +255,16 @@ export function UserManagementPage({ currentUser, onUsersChanged }: UserManageme
       </section>
 
       {creating ? (
-        <UserFormModal people={people} canUseSuperAdminRole={currentUser.role === 'super_admin'} onSubmit={saveUser} onClose={() => setCreating(false)} />
+        <UserFormModal people={people} onSubmit={saveUser} onClose={() => setCreating(false)} />
       ) : null}
       {editingUser ? (
-        <UserFormModal user={editingUser} people={people} canUseSuperAdminRole={currentUser.role === 'super_admin'} onSubmit={saveUser} onClose={() => setEditingUser(null)} />
+        <UserFormModal
+          user={editingUser}
+          people={people}
+          onSubmit={saveUser}
+          onDelete={editingUser.role === 'super_admin' ? undefined : () => removeUser(editingUser)}
+          onClose={() => setEditingUser(null)}
+        />
       ) : null}
       {permissionsUser ? (
         <PermissionEditorModal user={permissionsUser} onSubmit={(permissions) => savePermissions(permissionsUser, permissions)} onClose={() => setPermissionsUser(null)} />

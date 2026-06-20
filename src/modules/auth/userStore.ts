@@ -32,7 +32,7 @@ export function loadUserStore(): UserStore {
     const normalized = normalizeUserStore(parsed)
     if (!normalized) return initializeUserStore()
 
-    if (!isRecord(parsed) || parsed.version !== 3 || !Array.isArray(parsed.users) || normalized.users.length !== parsed.users.length) {
+    if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
       localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(normalized))
     }
 
@@ -43,8 +43,10 @@ export function loadUserStore(): UserStore {
 }
 
 export function saveUserStore(store: UserStore): UserStore {
+  const normalized = normalizeUserStore(store)
+  if (!normalized) throw new Error('账号数据无效，无法保存')
   const nextStore: UserStore = {
-    ...store,
+    ...normalized,
     updatedAt: new Date().toISOString(),
   }
   localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(nextStore))
@@ -61,8 +63,8 @@ export function findUserById(store: UserStore, userId: string): UserRecord | nul
 }
 
 export function createUser(store: UserStore, input: NewUserInput, actor: UserActor): UserStore {
-  assertHasPermission(actor, 'users:manage', '你没有权限新增账号')
-  assertSuperAdminBoundary(actor, input.role)
+  assertSystemManager(actor, 'users:manage', '你没有权限新增账号')
+  assertCreatableRole(input.role)
   validateProfile(store, input)
   if (!input.passwordHash) throw new Error('请输入初始密码')
 
@@ -88,10 +90,10 @@ export function createUser(store: UserStore, input: NewUserInput, actor: UserAct
 }
 
 export function updateUserProfile(store: UserStore, userId: string, input: UserProfileInput, actor: UserActor): UserStore {
-  assertHasPermission(actor, 'users:manage', '你没有权限编辑账号')
+  assertSystemManager(actor, 'users:manage', '你没有权限编辑账号')
   const target = requireUser(store, userId)
   assertTargetMayBeManaged(actor, target)
-  assertSuperAdminBoundary(actor, input.role)
+  assertRoleMayBeUpdated(target, input.role)
   validateProfile(store, input, userId)
 
   const now = new Date().toISOString()
@@ -108,7 +110,10 @@ export function updateUserProfile(store: UserStore, userId: string, input: UserP
             position: input.position,
             personId: input.personId,
             status: input.status,
-            permissions: user.role === input.role ? user.permissions : getDefaultRolePermissions(input.role),
+            permissions: normalizeUserPermissions(
+              input.role,
+              user.role === input.role ? user.permissions : getDefaultRolePermissions(input.role),
+            ),
             updatedAt: now,
           }
         : user,
@@ -117,7 +122,7 @@ export function updateUserProfile(store: UserStore, userId: string, input: UserP
 }
 
 export function updateUserPermissions(store: UserStore, userId: string, permissions: Permission[], actor: UserActor): UserStore {
-  assertHasPermission(actor, 'permissions:manage', '你没有权限分配权限')
+  assertSystemManager(actor, 'permissions:manage', '你没有权限分配权限')
   const target = requireUser(store, userId)
   assertTargetMayBeManaged(actor, target)
   const normalizedPermissions = normalizeUserPermissions(target.role, permissions)
@@ -130,7 +135,7 @@ export function updateUserPermissions(store: UserStore, userId: string, permissi
 }
 
 export function resetUserPassword(store: UserStore, userId: string, passwordHash: string, actor: UserActor): UserStore {
-  assertHasPermission(actor, 'users:manage', '你没有权限重置密码')
+  assertSystemManager(actor, 'users:manage', '你没有权限重置密码')
   if (!passwordHash) throw new Error('请输入新密码')
   const target = requireUser(store, userId)
   assertTargetMayBeManaged(actor, target)
@@ -143,7 +148,7 @@ export function resetUserPassword(store: UserStore, userId: string, passwordHash
 }
 
 export function setUserStatus(store: UserStore, userId: string, status: UserStatus, actor: UserActor): UserStore {
-  assertHasPermission(actor, 'users:manage', '你没有权限修改账号状态')
+  assertSystemManager(actor, 'users:manage', '你没有权限修改账号状态')
   const target = requireUser(store, userId)
   assertTargetMayBeManaged(actor, target)
   if (target.id === actor.id && status === 'disabled') throw new Error('不能禁用当前登录账号')
@@ -152,6 +157,18 @@ export function setUserStatus(store: UserStore, userId: string, status: UserStat
   return saveUserStore({
     ...store,
     users: store.users.map((user) => (user.id === userId ? { ...user, status, updatedAt: now } : user)),
+  })
+}
+
+export function deleteUser(store: UserStore, userId: string, actor: UserActor): UserStore {
+  assertSystemManager(actor, 'users:manage', '你没有权限删除账号')
+  const target = requireUser(store, userId)
+  if (target.id === actor.id) throw new Error('不能删除当前登录账号')
+  if (target.role === 'super_admin') throw new Error('内置超级管理员账号不可删除')
+
+  return saveUserStore({
+    ...store,
+    users: store.users.filter((user) => user.id !== userId),
   })
 }
 
@@ -209,14 +226,37 @@ function normalizeUserStore(value: unknown): UserStore | null {
   if (!isRecord(value) || (value.version !== 1 && value.version !== 2 && value.version !== 3) || !Array.isArray(value.users)) return null
 
   const migratePermissions = value.version !== 3
-  const users = value.users.map((user) => normalizeUser(user, migratePermissions)).filter((user): user is UserRecord => user !== null)
-  if (users.length !== value.users.length) return null
+  const parsedUsers = value.users.map((user) => normalizeUser(user, migratePermissions)).filter((user): user is UserRecord => user !== null)
+  if (parsedUsers.length !== value.users.length) return null
 
   const now = new Date().toISOString()
-  const hasDefaultAdmin = users.some((user) => user.id === DEFAULT_ADMIN_ID || user.username === 'admin')
+  const canonicalIndex = parsedUsers.findIndex((user) => user.id === DEFAULT_ADMIN_ID)
+  const legacyCanonicalIndex = canonicalIndex === -1 ? parsedUsers.findIndex((user) => user.username === 'admin') : -1
+  const roleCanonicalIndex = canonicalIndex === -1 && legacyCanonicalIndex === -1
+    ? parsedUsers.findIndex((user) => user.role === 'super_admin')
+    : -1
+  const canonicalId = canonicalIndex >= 0
+    ? parsedUsers[canonicalIndex].id
+    : legacyCanonicalIndex >= 0
+      ? parsedUsers[legacyCanonicalIndex].id
+      : roleCanonicalIndex >= 0
+        ? parsedUsers[roleCanonicalIndex].id
+        : DEFAULT_ADMIN_ID
+  const usersWithCanonical = canonicalIndex >= 0 || legacyCanonicalIndex >= 0 || roleCanonicalIndex >= 0
+    ? parsedUsers
+    : [createDefaultAdmin(now), ...parsedUsers]
+  const users = usersWithCanonical.map((user) => {
+    const role: UserRole = user.id === canonicalId ? 'super_admin' : user.role === 'super_admin' ? 'admin' : user.role
+    return {
+      ...user,
+      role,
+      permissions: normalizeUserPermissions(role, user.permissions, migratePermissions),
+    }
+  })
+
   return {
     version: 3,
-    users: hasDefaultAdmin ? users : [createDefaultAdmin(now), ...users],
+    users,
     updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : now,
   }
 }
@@ -259,12 +299,17 @@ function validateProfile(store: UserStore, input: UserProfileInput, ignoredUserI
   if (store.users.some((user) => user.id !== ignoredUserId && user.username === username)) throw new Error('登录账号已存在')
 }
 
-function assertHasPermission(actor: UserActor, permission: Permission, message: string): void {
-  if (!hasPermission(actor, permission)) throw new Error(message)
+function assertSystemManager(actor: UserActor, permission: Permission, message: string): void {
+  if (actor.role !== 'super_admin' || !hasPermission(actor, permission)) throw new Error(message)
 }
 
-function assertSuperAdminBoundary(actor: UserActor, targetRole: UserRole): void {
-  if (targetRole === 'super_admin' && actor.role !== 'super_admin') throw new Error('只有超级管理员可以创建或修改超级管理员')
+function assertCreatableRole(role: UserRole): void {
+  if (role === 'super_admin') throw new Error('系统只保留一个内置超级管理员账号')
+}
+
+function assertRoleMayBeUpdated(target: UserRecord, nextRole: UserRole): void {
+  if (target.role === 'super_admin' && nextRole !== 'super_admin') throw new Error('内置超级管理员角色不可修改')
+  if (target.role !== 'super_admin' && nextRole === 'super_admin') throw new Error('系统不允许新增超级管理员')
 }
 
 function assertTargetMayBeManaged(actor: UserActor, target: UserRecord): void {

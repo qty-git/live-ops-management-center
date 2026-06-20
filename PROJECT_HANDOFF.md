@@ -1,8 +1,8 @@
 # 直播运营管理中台项目交接
 
 最后更新：2026-06-21
-当前分支：`codex/account-table-ux`
-阶段状态：阶段 1–8、CSS 搬家式拆分与账号表格体验优化均已完成验证和提交
+当前分支：`codex/system-permission-boundary`
+阶段状态：唯一超级管理员、隐藏系统权限与普通账号删除已完成实现和验证，未部署
 
 ## 1. 项目目标
 
@@ -13,9 +13,10 @@
 - 技术栈：React 19、TypeScript、Vite 8、CloudBase JS SDK。
 - 稳定线上分支：`main`，本轮未修改、未合并、未部署。
 - 阶段 1–8 稳定分支：`codex/ui-date-issue-edits`，提交 `db04b72` 已推送远端。
-- 当前开发分支：`codex/account-table-ux`，从 CSS 拆分文档提交 `bd0887f` 创建。
+- 当前开发分支：`codex/system-permission-boundary`，从账号表格文档提交 `f726fc3` 创建。
 - CSS 拆分提交：`26d6397 refactor: split stylesheet into ordered modules`，已推送 `origin/codex/style-split`，未部署。
 - 账号表格体验提交：`75c6244 feat: improve account table actions`；只调整账号页标记和样式，未改账号、权限或 CloudBase 逻辑。
+- 系统权限边界设计提交：`9fb5988 docs: design system permission boundary`；当前分支实现保持 users v3 数据形状不变。
 - 时间轴业务数据继续使用 `live-ops-management.timeline.v1`，CloudBase 仍同步 `timeline_stores/main`。
 - users 仍使用独立键 `live-ops-management.users.v1`，内部结构升级为 v3；session 使用原独立键，内部结构升级为 v4。
 - 阶段 4/5 未修改时间轴数据结构、业务存储键、CloudBase 集合、文档 ID、匿名登录或同步时序。
@@ -144,15 +145,15 @@ src/
 
 - `member`：查看全员时间轴、高亮本人任务、编辑本人任务反馈。
 - `manager`：member 权限 + 时间轴/全部任务/人员/模板/问题/内容管理和导出。
-- `admin`：manager 权限 + 查看和管理账号 + 成员视角权限；默认没有分配权限能力。
-- `super_admin`：全部权限，包括分配权限和删除数据权限键。
+- `admin`：manager 级业务权限，不再拥有账号管理、权限分配、成员视角或删除数据能力。
+- `super_admin`：系统唯一内置账号；默认拥有全部业务权限，并强制拥有四项隐藏系统权限。
 
-角色只决定新账号和迁移时的默认权限；每个用户仍保存独立权限快照。
+业务权限仍保存独立快照；四项系统权限不再参与授权，始终由唯一超级管理员身份强制决定。
 
 ## 6. 当前未提交改动
 
-- 账号表格功能与对应设计、计划文档已提交为 `75c6244`。
-- 当前只剩本交接文档状态更新，提交后工作区应恢复干净。
+- 系统权限边界、唯一超级管理员归一化、账号删除 UI 与实施计划已完成实现和验证。
+- 本轮提交后工作区应恢复干净；当前分支尚未部署到 CloudBase 正式环境。
 
 ## 7. 关键逻辑说明
 
@@ -160,8 +161,8 @@ src/
 - `App.tsx` 将 session.user 固定为 realUser，临时 viewUser 只来自当前 userStore；effectiveUser 用于普通业务页面，账号页例外使用 realUser。
 - `accessControl.ts` 是视角身份语义、通用权限要求、成员视角资格和账号目标保护的集中来源。
 - `routes.tsx` 仍是菜单和页面地址唯一配置源；账号页使用 OR 权限数组。
-- `permissions.ts` 是角色默认权限和权限分组唯一来源。
-- `userStore.ts` 是账号写操作安全边界；页面隐藏按钮之外，写入口仍拒绝越权和 super_admin 操作。
+- `permissions.ts` 是角色默认权限和可配置权限分组唯一来源；四项系统管理权限会按角色强制补齐或清除。
+- `userStore.ts` 是账号写操作安全边界；所有账号写操作同时要求 `super_admin` 角色和对应系统权限，并维持唯一内置超级管理员。
 - `taskAccess.ts` 是任务归属、字段能力和保存过滤唯一来源。
 - `TimelinePage` 是时间轴、计划、模板应用和导出操作的执行前权限边界；编辑中心回调还会在进入 store 更新前二次校验。
 - `TimelinePage` 不过滤任务，只向时间轴传入高亮判断和编辑能力。
@@ -216,14 +217,14 @@ src/
 ## 12. 新对话交接说明
 
 ```markdown
-当前分支：codex/account-table-ux
+当前分支：codex/system-permission-boundary
 
-阶段 1–8 稳定提交 db04b72 与 CSS 拆分已推送。账号表格体验提交 75c6244 已完成 lint、build、git diff check 和 1280px 浏览器验收。请先阅读 PROJECT_HANDOFF.md 并检查 git status。
+阶段 1–8、CSS 拆分与账号表格分支均已推送。当前分支实现唯一超级管理员、隐藏系统权限和普通账号删除；lint、build、模块级边界断言与 1280px 浏览器验收均通过。请先阅读 PROJECT_HANDOFF.md 并检查 git status。
 
 下一轮建议：
-- 确认 `codex/account-table-ux` 远端状态与工作区清洁度
-- 评审账号表格固定操作列、两行按钮、横向滚动提示和岗位 badge
-- 评审通过后再决定是否创建 `codex/permission-drawer`
+- 确认 `codex/system-permission-boundary` 提交、远端状态与工作区清洁度
+- 复核旧 v3 users 自动清理、唯一超级管理员和删除账号边界
+- 权限抽屉继续保留为后续独立分支，不混入本轮
 - 部署继续等待单独确认
 
 重要约束：
@@ -355,4 +356,34 @@ src/
 
 ### 15.3 后续建议
 
-先评审本分支的账号表格结果。权限抽屉如继续实施，应从本分支创建独立分支，并保持权限字段与保存逻辑不变。
+账号表格结果已作为当前权限边界分支的基线，固定操作列仍维持四个按钮两行布局。
+
+## 16. 唯一超级管理员、隐藏系统权限与账号删除（2026-06-21）
+
+### 16.1 权限与账号边界
+
+- 系统始终只保留一个内置 `super_admin`：优先识别 `system-super-admin`，兼容旧 `admin` 用户名和改名后的单一超级管理员。
+- 旧数据中的额外 `super_admin` 自动降级为 `admin`，保留资料、密码哈希和业务权限。
+- `users:manage`、`permissions:manage`、`perspective:switch`、`data:delete` 成为隐藏系统权限：超级管理员强制拥有，其他角色强制清除。
+- 权限编辑弹窗不再显示“系统管理”分组，计数只包含可配置业务权限。
+- 新增和编辑普通账号时不提供超级管理员角色；内置超级管理员角色显示为不可修改的系统角色。
+- 账号创建、资料、权限、密码、状态和删除写入口均同时校验真实 `super_admin` 角色与对应权限，旧 session 权限标记无法绕过。
+
+### 16.2 删除账号
+
+- 删除入口位于普通账号的“编辑账号资料”弹窗，不增加表格第五个按钮。
+- 删除前明确提示只删除登录账号，不删除人员、排班或历史任务。
+- 不能删除当前登录账号或任何超级管理员；删除不存在账号也会被 userStore 拒绝。
+- 删除成功后账号无法再次登录；纯前端架构仍无法主动撤销其他设备已经打开的离线标签页。
+
+### 16.3 验证结果
+
+- `git diff --check`、`npm run lint`、`npm run build`：通过；仅有原有主包体积提示。
+- 隔离模块断言：唯一超级管理员、额外超级管理员降级、普通角色四项系统权限清除、隐藏权限不可取消或绕过、普通账号删除全部通过。
+- 时间轴存储在迁移和删除前后保持字节一致，未修改 CloudBase 或业务数据结构。
+- 1280 × 720 浏览器验收：系统管理分组消失；超级管理员显示 22 项可配置业务权限；角色锁定；普通账号角色仅有 member、manager、admin；删除入口仅在普通账号编辑弹窗出现。
+- 原生删除确认框正常出现；内置浏览器在原生确认框后失去控制，确认后的数据结果由隔离模块断言覆盖。
+
+### 16.4 后续建议
+
+提交并推送当前分支后先做人工测试。正式 CloudBase 部署继续等待用户单独确认。

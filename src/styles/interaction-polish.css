@@ -553,6 +553,33 @@ a:focus-visible {
   background: #fcfcfd;
 }
 
+.account-form-footer {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.account-form-footer > div:empty {
+  display: none;
+}
+
+.account-form-footer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.system-role-field input:disabled {
+  border-color: #d0d5dd;
+  color: #475467;
+  background: #f2f4f7;
+  cursor: not-allowed;
+  opacity: 1;
+}
+
 .modal-panel .form-grid label {
   gap: 7px;
 }
@@ -677,6 +704,21 @@ a:focus-visible {
 
   .user-management-page {
     padding: 16px 14px 32px;
+  }
+
+  .account-form-footer {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .account-form-footer > div,
+  .account-form-footer-actions {
+    width: 100%;
+  }
+
+  .account-form-footer .danger-button,
+  .account-form-footer-actions > button {
+    flex: 1;
   }
 
   .modal-backdrop {

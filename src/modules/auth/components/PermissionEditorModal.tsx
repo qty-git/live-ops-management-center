@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Modal } from '../../../shared/components/Modal'
-import { PERMISSION_GROUPS } from '../permissions'
-import { PERMISSIONS, type Permission, type UserRecord } from '../types'
+import { CONFIGURABLE_PERMISSIONS, PERMISSION_GROUPS } from '../permissions'
+import type { Permission, UserRecord } from '../types'
 
 interface PermissionEditorModalProps {
   user: UserRecord
@@ -10,7 +10,9 @@ interface PermissionEditorModalProps {
 }
 
 export function PermissionEditorModal({ user, onSubmit, onClose }: PermissionEditorModalProps) {
-  const [selected, setSelected] = useState(() => new Set<Permission>(user.permissions))
+  const [selected, setSelected] = useState(
+    () => new Set<Permission>(user.permissions.filter((permission) => CONFIGURABLE_PERMISSIONS.includes(permission))),
+  )
 
   const toggle = (permission: Permission, checked: boolean) => {
     setSelected((current) => {
@@ -22,7 +24,7 @@ export function PermissionEditorModal({ user, onSubmit, onClose }: PermissionEdi
   }
 
   const save = () => {
-    onSubmit(PERMISSIONS.filter((permission) => selected.has(permission)))
+    onSubmit(CONFIGURABLE_PERMISSIONS.filter((permission) => selected.has(permission)))
     onClose()
   }
 
@@ -42,7 +44,7 @@ export function PermissionEditorModal({ user, onSubmit, onClose }: PermissionEdi
       <div className="permission-editor-intro">
         <div>
           <strong>为该账号配置独立权限</strong>
-          <span>角色仅提供默认值，此处保存后以当前勾选结果为准。</span>
+          <span>仅配置可调整的业务权限，保存后以当前勾选结果为准。</span>
         </div>
         <span className="permission-selected-count">已选择 {selectedCount} 项</span>
       </div>

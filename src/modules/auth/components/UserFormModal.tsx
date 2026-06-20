@@ -8,12 +8,12 @@ import type { UserProfileInput } from '../userStore'
 interface UserFormModalProps {
   user?: UserRecord
   people: TeamPerson[]
-  canUseSuperAdminRole: boolean
   onSubmit: (profile: UserProfileInput, password: string) => Promise<void>
+  onDelete?: () => void
   onClose: () => void
 }
 
-export function UserFormModal({ user, people, canUseSuperAdminRole, onSubmit, onClose }: UserFormModalProps) {
+export function UserFormModal({ user, people, onSubmit, onDelete, onClose }: UserFormModalProps) {
   const [name, setName] = useState(user?.name ?? '')
   const [username, setUsername] = useState(user?.username ?? '')
   const [password, setPassword] = useState('')
@@ -24,7 +24,7 @@ export function UserFormModal({ user, people, canUseSuperAdminRole, onSubmit, on
   const [status, setStatus] = useState<UserStatus>(user?.status ?? 'active')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const roleOptions = USER_ROLES.filter((option) => option !== 'super_admin' || canUseSuperAdminRole)
+  const roleOptions = USER_ROLES.filter((option) => option !== 'super_admin')
   const peopleOptions = useMemo(
     () => people.filter((person) => position === '管理' || person.role === position),
     [people, position],
@@ -71,12 +71,17 @@ export function UserFormModal({ user, people, canUseSuperAdminRole, onSubmit, on
       title={user ? '编辑账号资料' : '新增账号'}
       onClose={onClose}
       footer={
-        <>
-          <button className="secondary-button" type="button" onClick={onClose}>取消</button>
-          <button className="primary-button" type="submit" form="user-account-form" disabled={submitting}>
-            {submitting ? '正在保存...' : '保存账号'}
-          </button>
-        </>
+        <div className="account-form-footer">
+          <div>
+            {onDelete ? <button className="danger-button" type="button" onClick={onDelete}>删除账号</button> : null}
+          </div>
+          <div className="account-form-footer-actions">
+            <button className="secondary-button" type="button" onClick={onClose}>取消</button>
+            <button className="primary-button" type="submit" form="user-account-form" disabled={submitting}>
+              {submitting ? '正在保存...' : '保存账号'}
+            </button>
+          </div>
+        </div>
       }
     >
       <form className="form-grid" id="user-account-form" onSubmit={submit}>
@@ -111,12 +116,19 @@ export function UserFormModal({ user, people, canUseSuperAdminRole, onSubmit, on
             {peopleOptions.map((person) => <option value={person.id} key={person.id}>{person.name}（{person.role}）</option>)}
           </select>
         </label>
-        <label>
-          角色
-          <select value={role} onChange={(event) => setRole(event.target.value as UserRole)}>
-            {roleOptions.map((option) => <option value={option} key={option}>{ROLE_LABELS[option]}</option>)}
-          </select>
-        </label>
+        {user?.role === 'super_admin' ? (
+          <label className="system-role-field">
+            角色
+            <input value="超级管理员（系统内置）" disabled readOnly />
+          </label>
+        ) : (
+          <label>
+            角色
+            <select value={role} onChange={(event) => setRole(event.target.value as UserRole)}>
+              {roleOptions.map((option) => <option value={option} key={option}>{ROLE_LABELS[option]}</option>)}
+            </select>
+          </label>
+        )}
         <label>
           状态
           <select value={status} onChange={(event) => setStatus(event.target.value as UserStatus)}>
